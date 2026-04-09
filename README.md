@@ -2,83 +2,165 @@
 
 A social golf platform built on two pillars: a white-label tournament/league engine for organizations, and a social feed that drives daily player engagement.
 
-## M1 Foundation — What's Built
+## Quick Start for Testers
 
-### Mobile App (`apps/mobile/`)
-- **Auth**: Email OTP, Phone OTP, Google OAuth, Apple (native build required)
-- **Onboarding**: 5-step wizard — profile basics, handicap (GHIN or manual), home course search (30K+ courses via GolfCourseAPI), play style, player discovery
-- **Navigation**: 5-tab bottom bar — Home, Play, Leaderboard, Bets, Profile
-- **GPS Scoring**: Round sessions with hole-by-hole scorecard, stroke/putt/penalty counters, distance to pin, offline-first sync
-- **Social Feed**: Real-time feed with Following/Local/Global filters, live match ticker
-- **Leaderboard**: Ranked by best score, Week/Month/All Time filters, real-time updates via Supabase Realtime
-- **Tee Time Search**: Date picker, course cards with pricing (read-only, booking in M2)
-- **Profile**: Stats grid, round history with GPS verification badges, drill-down scorecard
+### Option 1: Expo Go (fastest, no build required)
 
-### API Server (`apps/api/`)
-- **Runtime**: Bun + Hono
-- **Database**: Supabase Postgres via Prisma ORM (15 tables, 7 enums, RLS policies)
-- **Auth**: Supabase Auth JWT middleware
-- **Routes**: Users, Rounds, Feed, Leaderboard, Tee Times, Courses (GolfCourseAPI.com)
-- **Deployed**: Railway at `https://sticks-api-production.up.railway.app`
-- **Monitoring**: Sentry integration
+1. Install [Expo Go](https://apps.apple.com/app/expo-go/id982107779) on your iPhone
+2. Clone this repo: `git clone https://github.com/TOTL-HERO/Sticks.git`
+3. Start the API server:
+   ```bash
+   cd apps/api
+   bun install
+   bun run dev
+   ```
+4. Start the mobile app:
+   ```bash
+   cd apps/mobile
+   npm install
+   npx expo start --tunnel
+   ```
+5. Scan the QR code in your terminal with your iPhone camera
+6. Sign in with email (enter your email, get a code, enter the code)
 
-### Tech Stack
+**Expo Go limitations:** No Google Maps (shows placeholder with distance numbers), no background GPS when screen locked. Everything else works.
+
+### Option 2: Development Build (full experience with maps + background GPS)
+
+1. Install EAS CLI: `npm install -g eas-cli`
+2. Log in to Expo: `eas login`
+3. Build the dev client:
+   ```bash
+   cd apps/mobile
+   eas build --profile development --platform ios
+   ```
+4. Install the build on your device (EAS will give you a link)
+5. Start the dev server:
+   ```bash
+   npx expo start --dev-client --tunnel
+   ```
+6. Open the installed Sticks app — it connects to the dev server automatically
+
+### Environment Setup
+
+Create `apps/mobile/.env`:
+```
+EXPO_PUBLIC_SUPABASE_URL=https://opawcbnhyzfdavuliuqo.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=<ask Cody for the key>
+EXPO_PUBLIC_API_URL=https://sticks-api-production.up.railway.app
+```
+
+Create `apps/api/.env`:
+```
+DATABASE_URL=<ask Cody for the connection string>
+SUPABASE_URL=https://opawcbnhyzfdavuliuqo.supabase.co
+SUPABASE_SERVICE_ROLE_KEY=<ask Cody for the key>
+GOLF_COURSE_API_KEY=<ask Cody for the key>
+PORT=3000
+```
+
+## What's Built (M1 Foundation + Scoring Overhaul)
+
+### Auth & Onboarding
+- Email OTP, Phone OTP, Google OAuth sign-in
+- 5-step onboarding: profile, handicap (GHIN or manual), home course (30K+ real courses), play style, player discovery
+- Apple Sign In ready (needs dev build)
+
+### GPS Scoring with Shot Tracking
+- Start a round from the Play tab — search and select a course
+- Par-defaulted stepper (defaults to par, not zero) — one-thumb scoring
+- Color-coded scorecard: gold (eagle), green (birdie), white (par), red (bogey)
+- Auto-advance to next hole after confirming score
+- Tap any hole row to correct a previous score (2 taps max)
+- Optional putts, fairway hit, GIR toggles below the stepper
+- Confirmation sheet slides up on score confirm with shot count
+
+### Passive Shot Tracking (runs automatically)
+- GPS stillness detection: when you stop moving for 5+ seconds, the app flags it as a shot
+- Shot points recorded with start/end coordinates, timestamps, accuracy
+- Syncs to Supabase in the background
+- Track integrity score computed on round finalization (0.0–1.0)
+- This is the proof-of-play chain for bet settlement and tournament disputes
+
+### Social Feed
+- Real-time feed on the Home tab (Following / Local / Global filters)
+- Round completion events with player name, course, score
+- Supabase Realtime push — no pull-to-refresh needed
+
+### Leaderboard
+- Ranked by best score relative to par
+- Week / Month / All Time filters
+- Real-time updates when rounds are finalized
+- "My Position" sticky card
+
+### Tee Time Search
+- Date picker with 7-day range
+- Course cards with time, slots, price
+- Read-only for now (booking comes in M2)
+
+### Profile
+- Stats grid (avg putts computed from real data)
+- Round history with GPS verification badges
+- Drill-down scorecard for any round
+
+## Tech Stack
+
 | Layer | Technology |
 |-------|-----------|
 | Mobile | Expo SDK 54 / React Native |
 | State | Zustand + TanStack Query |
-| API | Bun + Hono |
+| API | Bun + Hono (deployed on Railway) |
 | ORM | Prisma |
-| Database | Supabase Postgres |
+| Database | Supabase Postgres (15 tables + ShotTrack) |
 | Auth | Supabase Auth |
 | Realtime | Supabase Realtime |
-| Hosting | Railway |
 | Course Data | GolfCourseAPI.com (30K+ courses) |
+| Monitoring | Sentry |
 
-## Getting Started
+## API Server
 
-### API Server
-```bash
-cd apps/api
-cp .env.example .env  # fill in your Supabase credentials
-bun install
-bun run dev
+Deployed at: `https://sticks-api-production.up.railway.app`
+
+Health check: `GET /health` → `{"status":"ok"}`
+
+Key endpoints:
+- `POST /rounds` — start a round
+- `PUT /rounds/:id/holes/:num` — update hole score
+- `POST /rounds/:id/shots` — batch upload shot tracking points
+- `POST /rounds/:id/finalize` — end round, compute integrity score
+- `GET /leaderboard?period=week|month|all` — leaderboard
+- `GET /feed?scope=following|local|global` — social feed
+- `GET /courses/search?query=...` — search 30K+ courses
+- `GET /tee-times?date=YYYY-MM-DD` — tee time search
+
+## Project Structure
+
 ```
-
-### Mobile App
-```bash
-cd apps/mobile
-cp .env.example .env  # fill in Supabase + API URL
-npm install
-npx expo start --tunnel
+apps/
+  api/                    # Bun + Hono API server
+    src/
+      routes/             # API route handlers
+      middleware/          # Auth middleware
+      lib/                # Prisma client, Supabase client
+    prisma/               # Schema + migrations
+  mobile/                 # Expo React Native app
+    src/
+      screens/            # All app screens
+        auth/             # Landing, SignUp, SignIn
+        onboarding/       # 5-step wizard
+        scoring/          # ScoringScreen + components
+      components/         # Reusable UI (Card, Button, TopAppBar)
+      hooks/              # useAuth
+      stores/             # Zustand stores (roundStore, appStore)
+      services/           # backgroundLocation, syncQueue, courseDataProvider
+      utils/              # getScoreColor
+      navigation/         # React Navigation setup
+      lib/                # Supabase client, API helper
 ```
-
-Scan the QR code with Expo Go on your phone.
-
-### Database
-Tables are created via Prisma migrations. Run against your Supabase instance:
-```bash
-cd apps/api
-bunx prisma migrate deploy
-```
-
-## Environment Variables
-
-### API (`apps/api/.env`)
-- `DATABASE_URL` — Supabase Postgres connection string
-- `SUPABASE_URL` — Supabase project URL
-- `SUPABASE_SERVICE_ROLE_KEY` — Supabase service role key
-- `GOLF_COURSE_API_KEY` — GolfCourseAPI.com API key
-- `PORT` — Server port (default 3000)
-
-### Mobile (`apps/mobile/.env`)
-- `EXPO_PUBLIC_SUPABASE_URL` — Supabase project URL
-- `EXPO_PUBLIC_SUPABASE_ANON_KEY` — Supabase anon key
-- `EXPO_PUBLIC_API_URL` — API server URL
 
 ## Milestone Roadmap
-- **M1** ✅ Foundation (auth, onboarding, schema, GPS scoring, feed, leaderboard)
-- **M2** GPS + Scoring enhancements, offline sync, GHIN integration
+- **M1** ✅ Foundation + Scoring Overhaul
+- **M2** GPS map integration, offline sync hardening, GHIN API
 - **M3** Tournament Engine
 - **M4** White Label + Orgs
 - **M5** Social Feed + Crews

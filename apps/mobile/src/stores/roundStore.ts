@@ -1,19 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
-import * as SecureStore from 'expo-secure-store';
-
-// SecureStore-based storage adapter for Zustand persist
-const secureStoreStorage = {
-  getItem: async (name: string): Promise<string | null> => {
-    return SecureStore.getItemAsync(name);
-  },
-  setItem: async (name: string, value: string): Promise<void> => {
-    await SecureStore.setItemAsync(name, value);
-  },
-  removeItem: async (name: string): Promise<void> => {
-    await SecureStore.deleteItemAsync(name);
-  },
-};
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export interface LocalHoleState {
   holeNumber: number;
@@ -207,7 +194,7 @@ export const useRoundStore = create<RoundState>()(
     }),
     {
       name: 'sticks-round-store',
-      storage: createJSONStorage(() => secureStoreStorage),
+      storage: createJSONStorage(() => AsyncStorage),
     },
   ),
 );
