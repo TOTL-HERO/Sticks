@@ -8,20 +8,25 @@ A social golf platform built on two pillars: a white-label tournament/league eng
 
 1. Install [Expo Go](https://apps.apple.com/app/expo-go/id982107779) on your iPhone
 2. Clone this repo: `git clone https://github.com/TOTL-HERO/Sticks.git`
-3. Start the API server:
-   ```bash
-   cd apps/api
-   bun install
-   bun run dev
-   ```
-4. Start the mobile app:
+3. Set up the mobile app:
    ```bash
    cd apps/mobile
    npm install
+   ```
+4. Create `apps/mobile/.env` (ask Cody for the values):
+   ```
+   EXPO_PUBLIC_SUPABASE_URL=https://opawcbnhyzfdavuliuqo.supabase.co
+   EXPO_PUBLIC_SUPABASE_ANON_KEY=<ask Cody>
+   EXPO_PUBLIC_API_URL=https://sticks-api-production.up.railway.app
+   ```
+5. Start the app:
+   ```bash
    npx expo start --tunnel
    ```
-5. Scan the QR code in your terminal with your iPhone camera
-6. Sign in with email (enter your email, get a code, enter the code)
+6. Scan the QR code in your terminal with your iPhone camera
+7. Sign in with email (enter your email, get a code, enter the code)
+
+The API server is already deployed on Railway at `https://sticks-api-production.up.railway.app` — you don't need to run it locally.
 
 **Expo Go limitations:** No Google Maps (shows placeholder with distance numbers), no background GPS when screen locked. Everything else works.
 
@@ -43,6 +48,8 @@ A social golf platform built on two pillars: a white-label tournament/league eng
 
 ### Environment Setup
 
+The API is already deployed on Railway — testers only need the mobile `.env` file.
+
 Create `apps/mobile/.env`:
 ```
 EXPO_PUBLIC_SUPABASE_URL=https://opawcbnhyzfdavuliuqo.supabase.co
@@ -50,7 +57,7 @@ EXPO_PUBLIC_SUPABASE_ANON_KEY=<ask Cody for the key>
 EXPO_PUBLIC_API_URL=https://sticks-api-production.up.railway.app
 ```
 
-Create `apps/api/.env`:
+For developers working on the API locally, create `apps/api/.env`:
 ```
 DATABASE_URL=<ask Cody for the connection string>
 SUPABASE_URL=https://opawcbnhyzfdavuliuqo.supabase.co
@@ -58,6 +65,14 @@ SUPABASE_SERVICE_ROLE_KEY=<ask Cody for the key>
 GOLF_COURSE_API_KEY=<ask Cody for the key>
 PORT=3000
 ```
+
+To run the API locally (optional — only needed if you're making API changes):
+```bash
+cd apps/api
+bun install
+bun run dev
+```
+Then change `EXPO_PUBLIC_API_URL` in the mobile `.env` to `http://YOUR_LOCAL_IP:3000`.
 
 ## What's Built (M1 Foundation + Scoring Overhaul)
 
