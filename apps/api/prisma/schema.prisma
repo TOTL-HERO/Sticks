@@ -67,6 +67,14 @@ enum TournamentStatus {
   CANCELLED
 }
 
+enum ShotEventType {
+  DETECTED
+  MANUAL
+  CORRECTED
+  ROUND_START
+  ROUND_END
+}
+
 // ─── Core Entities ───────────────────────────────────────────────────────────
 
 model User {
@@ -188,9 +196,12 @@ model Round {
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
+  trackIntegrity Float?
+
   tournament Tournament? @relation(fields: [tournamentId], references: [id])
   holes      Hole[]
   players    RoundPlayer[]
+  shots      ShotTrack[]
 }
 
 model RoundPlayer {
@@ -211,6 +222,8 @@ model Hole {
   strokes      Int       @default(0)
   putts        Int       @default(0)
   penalties    Int       @default(0)
+  fairwayHit   Boolean?
+  gir          Boolean?
   gpsTimestamp DateTime?
   par          Int?
   createdAt    DateTime  @default(now())
@@ -288,4 +301,26 @@ model TeeTime {
   foreupRefId    String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+}
+
+model ShotTrack {
+  id             String        @id @default(uuid())
+  roundId        String
+  holeNumber     Int
+  shotNumber     Int
+  startLatitude  Float
+  startLongitude Float
+  endLatitude    Float?
+  endLongitude   Float?
+  timestamp      DateTime
+  eventType      ShotEventType
+  accuracy       Float
+  altitude       Float?
+  createdAt      DateTime      @default(now())
+
+  round Round @relation(fields: [roundId], references: [id])
+
+  @@index([roundId])
+  @@index([roundId, holeNumber])
+  @@index([timestamp])
 }

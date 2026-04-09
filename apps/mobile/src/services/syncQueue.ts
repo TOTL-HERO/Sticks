@@ -53,13 +53,47 @@ async function syncPendingHoles(): Promise<void> {
   }
 }
 
+async function syncPendingShots(): Promise<void> {
+  const { activeRound, markShotsSynced } = useRoundStore.getState();
+  if (!activeRound) return;
+
+  const pending = activeRound.shotPoints.filter((sp) => !sp.synced);
+  if (pending.length === 0) return;
+
+  const payload = {
+    shots: pending.map((sp) => ({
+      id: sp.id,
+      holeNumber: sp.holeNumber,
+      shotNumber: sp.shotNumber,
+      startLatitude: sp.startLatitude,
+      startLongitude: sp.startLongitude,
+      endLatitude: sp.endLatitude,
+      endLongitude: sp.endLongitude,
+      timestamp: sp.timestamp,
+      eventType: sp.eventType,
+      accuracy: sp.accuracy,
+      altitude: sp.altitude,
+    })),
+  };
+
+  try {
+    await apiFetch(`/rounds/${activeRound.id}/shots`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
+    markShotsSynced(pending.map((sp) => sp.id));
+  } catch {
+    // Shot sync failed — will retry on next network change
+  }
+}
+
 function handleNetworkChange(state: NetInfoState): void {
   const { activeRound, setSyncStatus } = useRoundStore.getState();
   if (!activeRound) return;
 
   if (state.isConnected && state.isInternetReachable !== false) {
-    // Online — trigger sync
-    syncPendingHoles();
+    // Online — trigger sync for holes then shots
+    syncPendingHoles().then(() => syncPendingShots());
   } else {
     setSyncStatus('offline');
   }
@@ -77,4 +111,4 @@ export function stopSyncQueue(): void {
   }
 }
 
-export { syncPendingHoles };
+export { syncPendingHoles, syncPendingShots };

@@ -1,17 +1,28 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet, ScrollView } from 'react-native';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  TouchableOpacity,
+  ActivityIndicator,
+  Alert,
+  Platform,
+  PanResponder,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Alert, Platform, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
 import { useNavigation } from '@react-navigation/native';
-import { Card } from '../../components/Card';
-import { Button } from '../../components/Button';
 import { useRoundStore, type SyncStatus } from '../../stores/roundStore';
 import { useAppStore } from '../../stores/appStore';
 import { apiFetch } from '../../lib/api';
-import { startSyncQueue, stopSyncQueue, syncPendingHoles } from '../../services/syncQueue';
+import { startSyncQueue, stopSyncQueue, syncPendingHoles, syncPendingShots } from '../../services/syncQueue';
 import { registerBackgroundLocationTask } from '../../services/backgroundLocation';
+import { HoleRow } from './HoleRow';
+import { ScoreStepperCard } from './ScoreStepperCard';
+import { SecondaryStatsPanel } from './SecondaryStatsPanel';
+import { HoleConfirmationSheet } from './HoleConfirmationSheet';
 
 const MOCK_DISTANCES: Record<number, { front: number; center: number; back: number }> = {
   1: { front: 145, center: 158, back: 172 }, 2: { front: 132, center: 147, back: 160 },
@@ -26,134 +37,330 @@ const MOCK_DISTANCES: Record<number, { front: number; center: number; back: numb
 };
 
 function SyncStatusBadge({ status }: { status: SyncStatus }) {
-  if (status === 'synced') return (<View style={s.syncRow}><MaterialCommunityIcons name="check-circle" size={16} color="#84d7af" /><Text style={[s.syncText, { color: '#84d7af' }]}>Synced</Text></View>);
-  if (status === 'pending') return (<View style={s.syncRow}><ActivityIndicator size="small" color="#e9c349" /><Text style={[s.syncText, { color: '#e9c349' }]}>Syncing</Text></View>);
-  return (<View style={s.syncRow}><MaterialCommunityIcons name="circle" size={12} color="#ffb4ab" /><Text style={[s.syncText, { color: '#ffb4ab' }]}>Offline</Text></View>);
+  if (status === 'synced')
+    return (
+      <View style={s.syncRow}>
+        <MaterialCommunityIcons name="check-circle" size={16} color="#84d7af" />
+        <Text style={[s.syncText, { color: '#84d7af' }]}>Synced</Text>
+      </View>
+    );
+  if (status === 'pending')
+    return (
+      <View style={s.syncRow}>
+        <ActivityIndicator size="small" color="#e9c349" />
+        <Text style={[s.syncText, { color: '#e9c349' }]}>Syncing</Text>
+      </View>
+    );
+  return (
+    <View style={s.syncRow}>
+      <MaterialCommunityIcons name="circle" size={12} color="#ffb4ab" />
+      <Text style={[s.syncText, { color: '#ffb4ab' }]}>Offline</Text>
+    </View>
+  );
 }
 
 export function ScoringScreen() {
   const navigation = useNavigation<any>();
-  const { activeRound, syncStatus, updateHole, advanceHole, finalizeRound, clearRound } = useRoundStore();
-  const setHideTabBar = useAppStore((s) => s.setHideTabBar);
+  const {
+    activeRound,
+    syncStatus,
+    updateHole,
+    advanceHole,
+    goToHole,
+    finalizeRound,
+    clearRound,
+  } = useRoundStore();
+  const setHideTabBar = useAppStore((st) => st.setHideTabBar);
+
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
+  const [sheetVisible, setSheetVisible] = useState(false);
 
   const currentHole = activeRound?.currentHole ?? 1;
   const holeData = activeRound?.holes.find((h) => h.holeNumber === currentHole);
   const distances = MOCK_DISTANCES[currentHole] ?? { front: 150, center: 165, back: 180 };
 
-  const totalStrokes = activeRound?.holes.reduce((sum, h) => sum + h.strokes, 0) ?? 0;
-  const totalPar = activeRound?.holes.filter((h) => h.strokes > 0).reduce((sum, h) => sum + h.par, 0) ?? 0;
-  const scoreRelPar = totalStrokes - totalPar;
-  const holesPlayed = activeRound?.holes.filter((h) => h.strokes > 0).length ?? 0;
+  // Shot count for current hole
+  const shotCount =
+    activeRound?.shotPoints.filter(
+      (sp) =>
+        sp.holeNumber === currentHole &&
+        (sp.eventType === 'DETECTED' || sp.eventType === 'MANUAL' || sp.eventType === 'CORRECTED'),
+    ).length ?? 0;
 
+  // Running score
+  const totalStrokes = activeRound?.holes.reduce((sum, h) => sum + h.strokes, 0) ?? 0;
+  const totalPar = activeRound?.holes.reduce((sum, h) => sum + h.par, 0) ?? 0;
+  const scoreRelPar = totalStrokes - totalPar;
+
+  // --- Swipe gesture for hole navigation ---
+  const panResponder = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dx) > 30 && Math.abs(gs.dy) < 30,
+      onPanResponderRelease: (_, gs) => {
+        const { activeRound: round } = useRoundStore.getState();
+        if (!round) return;
+        if (gs.dx < -50 && round.currentHole < 18) {
+          useRoundStore.getState().advanceHole();
+        } else if (gs.dx > 50 && round.currentHole > 1) {
+          useRoundStore.getState().goToHole(round.currentHole - 1);
+        }
+      },
+    }),
+  ).current;
+
+  // --- Location setup ---
   useEffect(() => {
     let sub: Location.LocationSubscription | null = null;
     (async () => {
       const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') { Alert.alert('Location Required', 'Sticks uses your location to calculate distance to the pin during golf rounds.'); return; }
+      if (status !== 'granted') {
+        Alert.alert(
+          'Location Required',
+          'Sticks uses your location to calculate distance to the pin during golf rounds.',
+        );
+        return;
+      }
       const loc = await Location.getCurrentPositionAsync({});
       setLocation(loc);
-      sub = await Location.watchPositionAsync({ accuracy: Location.Accuracy.High, distanceInterval: 5 }, (newLoc) => setLocation(newLoc));
+      sub = await Location.watchPositionAsync(
+        { accuracy: Location.Accuracy.High, distanceInterval: 5 },
+        (newLoc) => setLocation(newLoc),
+      );
       if (Platform.OS === 'ios') registerBackgroundLocationTask();
     })();
-    return () => { sub?.remove(); };
+    return () => {
+      sub?.remove();
+    };
   }, []);
 
-  useEffect(() => { startSyncQueue(); return () => stopSyncQueue(); }, []);
+  // --- Sync queue ---
+  useEffect(() => {
+    startSyncQueue();
+    return () => stopSyncQueue();
+  }, []);
 
-  const handleUpdateStrokes = useCallback((delta: number) => { if (!holeData) return; updateHole(currentHole, { strokes: Math.max(0, holeData.strokes + delta) }); }, [currentHole, holeData, updateHole]);
-  const handleUpdatePutts = useCallback((delta: number) => { if (!holeData) return; updateHole(currentHole, { putts: Math.max(0, holeData.putts + delta) }); }, [currentHole, holeData, updateHole]);
-  const handleAddPenalty = useCallback(() => { if (!holeData) return; updateHole(currentHole, { penalties: holeData.penalties + 1 }); }, [currentHole, holeData, updateHole]);
+  // --- Stepper handlers ---
+  const handleIncrement = useCallback(() => {
+    if (!holeData) return;
+    updateHole(currentHole, { strokes: holeData.strokes + 1 });
+  }, [currentHole, holeData, updateHole]);
 
+  const handleDecrement = useCallback(() => {
+    if (!holeData) return;
+    updateHole(currentHole, { strokes: Math.max(1, holeData.strokes - 1) });
+  }, [currentHole, holeData, updateHole]);
+
+  // --- Secondary stats handlers ---
+  const handlePuttsChange = useCallback(
+    (delta: number) => {
+      if (!holeData) return;
+      const current = holeData.putts ?? 0;
+      updateHole(currentHole, { putts: Math.max(0, current + delta) });
+    },
+    [currentHole, holeData, updateHole],
+  );
+
+  const handleFairwayToggle = useCallback(() => {
+    if (!holeData) return;
+    updateHole(currentHole, { fairwayHit: holeData.fairwayHit === true ? false : true });
+  }, [currentHole, holeData, updateHole]);
+
+  const handleGirToggle = useCallback(() => {
+    if (!holeData) return;
+    updateHole(currentHole, { gir: holeData.gir === true ? false : true });
+  }, [currentHole, holeData, updateHole]);
+
+  // --- Confirm score ---
+  const handleConfirmScore = useCallback(() => {
+    if (!holeData) return;
+    // Persist GPS timestamp
+    if (location) updateHole(currentHole, { gpsTimestamp: new Date().toISOString() });
+    syncPendingHoles();
+    syncPendingShots();
+    setSheetVisible(true);
+  }, [currentHole, holeData, location, updateHole]);
+
+  // --- Confirmation sheet save ---
+  const handleSheetSave = useCallback(
+    (data: { strokes: number; putts: number | null; fairwayHit: boolean | null; gir: boolean | null }) => {
+      updateHole(currentHole, {
+        strokes: data.strokes,
+        putts: data.putts,
+        fairwayHit: data.fairwayHit,
+        gir: data.gir,
+      });
+      syncPendingHoles();
+      setSheetVisible(false);
+
+      // Auto-advance after 300ms
+      setTimeout(() => {
+        if (currentHole >= 18) {
+          handleEndRound();
+        } else {
+          advanceHole();
+        }
+      }, 300);
+    },
+    [currentHole, updateHole, advanceHole],
+  );
+
+  // --- End round ---
   const handleEndRound = useCallback(async () => {
     if (!activeRound) return;
     Alert.alert('End Round', 'Are you sure you want to finish this round?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'End Round', style: 'destructive', onPress: async () => {
-        try { await syncPendingHoles(); await apiFetch(`/rounds/${activeRound.id}/finalize`, { method: 'POST' }); finalizeRound(); clearRound(); setHideTabBar(false); navigation.goBack(); }
-        catch (err: any) { Alert.alert('Error', err.message ?? 'Could not finalize round'); }
-      }},
+      {
+        text: 'End Round',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await syncPendingHoles();
+            await syncPendingShots();
+            await apiFetch(`/rounds/${activeRound.id}/finalize`, { method: 'POST' });
+            finalizeRound();
+            clearRound();
+            setHideTabBar(false);
+            navigation.goBack();
+          } catch (err: any) {
+            Alert.alert('Error', err.message ?? 'Could not finalize round');
+          }
+        },
+      },
     ]);
   }, [activeRound, finalizeRound, clearRound, setHideTabBar, navigation]);
 
-  const handleNextHole = useCallback(async () => {
-    if (location) updateHole(currentHole, { gpsTimestamp: new Date().toISOString() });
-    syncPendingHoles();
-    if (currentHole >= 18) handleEndRound(); else advanceHole();
-  }, [currentHole, location, updateHole, advanceHole, handleEndRound]);
+  // --- Hole row tap ---
+  const handleHolePress = useCallback(
+    (holeNumber: number) => {
+      goToHole(holeNumber);
+    },
+    [goToHole],
+  );
 
+  // --- No active round ---
   if (!activeRound || !holeData) {
-    return (<SafeAreaView style={s.safe}><View style={s.center}><Text style={s.noRound}>No active round</Text></View></SafeAreaView>);
+    return (
+      <SafeAreaView style={s.safe}>
+        <View style={s.center}>
+          <Text style={s.noRound}>No active round</Text>
+        </View>
+      </SafeAreaView>
+    );
   }
 
   return (
     <SafeAreaView style={s.safe} edges={['top']}>
-      <View style={{ flex: 1 }}>
-        {/* Header */}
+      <View style={{ flex: 1 }} {...panResponder.panHandlers}>
+        {/* 1. Header */}
         <View style={s.header}>
-          <Text style={s.courseName}>{activeRound.courseName}</Text>
+          <View style={{ flex: 1 }}>
+            <Text style={s.courseName}>{activeRound.courseName}</Text>
+          </View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
             <SyncStatusBadge status={syncStatus} />
-            <TouchableOpacity onPress={handleEndRound}><MaterialCommunityIcons name="flag-checkered" size={24} color="#ffb4ab" /></TouchableOpacity>
+            <TouchableOpacity onPress={handleEndRound}>
+              <MaterialCommunityIcons name="flag-checkered" size={24} color="#ffb4ab" />
+            </TouchableOpacity>
           </View>
         </View>
 
-        {/* Map placeholder */}
-        <View style={s.mapWrap}>
-          <View style={s.mapPlaceholder}>
-            <MaterialCommunityIcons name="map-marker-radius" size={40} color="#006747" />
-            <Text style={s.mapText}>GPS Active — Map requires dev build</Text>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
+          showsVerticalScrollIndicator={false}
+        >
+          {/* 2. GPS Section */}
+          <View style={s.gpsSection}>
+            <View style={s.mapPlaceholder}>
+              <MaterialCommunityIcons name="map-marker-radius" size={36} color="#006747" />
+              <Text style={s.mapText}>GPS Active</Text>
+            </View>
+            <View style={s.distRow}>
+              <View style={s.distItem}>
+                <Text style={s.distLabel}>FRONT</Text>
+                <Text style={[s.distVal, { color: '#84d7af' }]}>{distances.front}</Text>
+              </View>
+              <View style={s.distItem}>
+                <Text style={s.distLabel}>CENTER</Text>
+                <Text style={[s.distVal, { color: '#e9c349' }]}>{distances.center}</Text>
+              </View>
+              <View style={s.distItem}>
+                <Text style={s.distLabel}>BACK</Text>
+                <Text style={[s.distVal, { color: '#84d7af' }]}>{distances.back}</Text>
+              </View>
+            </View>
+            {/* Shot count indicator */}
+            <Text style={s.shotIndicator}>
+              {shotCount > 0
+                ? `${shotCount} shot${shotCount !== 1 ? 's' : ''} detected on this hole`
+                : 'No shots detected yet'}
+            </Text>
           </View>
-          <View style={s.distOverlay}>
-            <View style={{ alignItems: 'center' }}><Text style={s.distLabel}>FRONT</Text><Text style={[s.distVal, { color: '#84d7af' }]}>{distances.front}</Text></View>
-            <View style={{ alignItems: 'center' }}><Text style={s.distLabel}>CENTER</Text><Text style={[s.distVal, { color: '#e9c349' }]}>{distances.center}</Text></View>
-            <View style={{ alignItems: 'center' }}><Text style={s.distLabel}>BACK</Text><Text style={[s.distVal, { color: '#84d7af' }]}>{distances.back}</Text></View>
-          </View>
-        </View>
 
-        {/* Scorecard Controls */}
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingHorizontal: 16, gap: 12, paddingBottom: 100 }} showsVerticalScrollIndicator={false}>
-          <View style={s.holeHeader}>
-            <Text style={s.holeTitle}>Hole {currentHole} • Par {holeData.par}</Text>
+          {/* Score pill */}
+          <View style={s.scorePillRow}>
             <View style={s.scorePill}>
-              <Text style={[s.scorePillText, { color: scoreRelPar <= 0 ? '#84d7af' : '#ffb4ab' }]}>
-                {scoreRelPar === 0 ? 'E' : scoreRelPar > 0 ? `+${scoreRelPar}` : scoreRelPar} • {holesPlayed} holes
+              <Text
+                style={[
+                  s.scorePillText,
+                  { color: scoreRelPar <= 0 ? '#84d7af' : '#ffb4ab' },
+                ]}
+              >
+                {scoreRelPar === 0 ? 'E' : scoreRelPar > 0 ? `+${scoreRelPar}` : scoreRelPar}
               </Text>
             </View>
           </View>
 
-          {/* Strokes */}
-          <Card flexDirection="row" alignItems="center" justifyContent="space-between" paddingVertical={16}>
-            <Text style={s.counterLabel}>Strokes</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
-              <TouchableOpacity onPress={() => handleUpdateStrokes(-1)}><View style={s.minusBtn}><MaterialCommunityIcons name="minus" size={24} color="#bec9c1" /></View></TouchableOpacity>
-              <Text style={s.counterVal}>{holeData.strokes}</Text>
-              <TouchableOpacity onPress={() => handleUpdateStrokes(1)}><View style={s.plusBtn}><MaterialCommunityIcons name="plus" size={24} color="#84d7af" /></View></TouchableOpacity>
-            </View>
-          </Card>
-
-          {/* Putts + Penalty */}
-          <View style={{ flexDirection: 'row', gap: 12 }}>
-            <Card flex={1} flexDirection="row" alignItems="center" justifyContent="space-between">
-              <Text style={s.counterLabelSm}>Putts</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <TouchableOpacity onPress={() => handleUpdatePutts(-1)}><View style={s.minusBtnSm}><MaterialCommunityIcons name="minus" size={18} color="#bec9c1" /></View></TouchableOpacity>
-                <Text style={s.counterValSm}>{holeData.putts}</Text>
-                <TouchableOpacity onPress={() => handleUpdatePutts(1)}><View style={s.plusBtnSm}><MaterialCommunityIcons name="plus" size={18} color="#84d7af" /></View></TouchableOpacity>
-              </View>
-            </Card>
-            <TouchableOpacity onPress={handleAddPenalty} style={{ flex: 0 }}>
-              <Card alignItems="center" justifyContent="center" paddingHorizontal={16} height="100%">
-                <MaterialCommunityIcons name="alert-circle-outline" size={22} color="#e9c349" />
-                <Text style={s.penText}>+{holeData.penalties}</Text>
-              </Card>
-            </TouchableOpacity>
+          {/* 3. Live Scorecard */}
+          <View style={s.scorecardWrap}>
+            {activeRound.holes.map((hole) => (
+              <HoleRow
+                key={hole.holeNumber}
+                holeNumber={hole.holeNumber}
+                par={hole.par}
+                strokes={hole.strokes}
+                isCurrentHole={hole.holeNumber === currentHole}
+                onPress={handleHolePress}
+              />
+            ))}
           </View>
 
-          <View style={{ paddingBottom: 16 }}>
-            <Button variant="primary" fullWidth onPress={handleNextHole}>{currentHole >= 18 ? 'Finish Round' : 'Next Hole →'}</Button>
+          {/* 4. ScoreStepperCard */}
+          <View style={{ marginTop: 16 }}>
+            <ScoreStepperCard
+              holeNumber={currentHole}
+              par={holeData.par}
+              strokes={holeData.strokes}
+              onIncrement={handleIncrement}
+              onDecrement={handleDecrement}
+            />
           </View>
+
+          {/* 5. SecondaryStatsPanel */}
+          <SecondaryStatsPanel
+            putts={holeData.putts}
+            fairwayHit={holeData.fairwayHit}
+            gir={holeData.gir}
+            onPuttsChange={handlePuttsChange}
+            onFairwayToggle={handleFairwayToggle}
+            onGirToggle={handleGirToggle}
+          />
+
+          {/* 6. Confirm button */}
+          <TouchableOpacity activeOpacity={0.8} onPress={handleConfirmScore} style={s.confirmBtn}>
+            <Text style={s.confirmBtnText}>Confirm Score</Text>
+          </TouchableOpacity>
         </ScrollView>
+
+        {/* Confirmation Sheet */}
+        <HoleConfirmationSheet
+          visible={sheetVisible}
+          holeNumber={currentHole}
+          par={holeData.par}
+          detectedShotCount={shotCount}
+          onSave={handleSheetSave}
+          onDismiss={() => setSheetVisible(false)}
+        />
       </View>
     </SafeAreaView>
   );
@@ -163,28 +370,89 @@ const s = StyleSheet.create({
   safe: { flex: 1, backgroundColor: '#101511' },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   noRound: { color: '#dfe4dd', fontFamily: 'Manrope', fontSize: 14 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12 },
-  courseName: { fontFamily: 'Newsreader', fontSize: 24, fontStyle: 'italic', color: '#dfe4dd' },
+
+  // Header
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  courseName: {
+    fontFamily: 'Newsreader',
+    fontSize: 22,
+    fontStyle: 'italic',
+    color: '#dfe4dd',
+  },
   syncRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   syncText: { fontFamily: 'Manrope', fontSize: 11 },
-  mapWrap: { height: 180, marginHorizontal: 16, borderRadius: 12, overflow: 'hidden', marginBottom: 12 },
-  mapPlaceholder: { flex: 1, backgroundColor: '#0a1a10', alignItems: 'center', justifyContent: 'center' },
-  mapText: { fontFamily: 'Manrope', fontSize: 12, color: '#bec9c1', marginTop: 8 },
-  distOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', justifyContent: 'space-around', backgroundColor: 'rgba(16,21,17,0.85)', paddingVertical: 8, paddingHorizontal: 12 },
+
+  // GPS Section
+  gpsSection: {
+    backgroundColor: '#1c211c',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3f4943',
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
+  mapPlaceholder: {
+    height: 100,
+    backgroundColor: '#0a1a10',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  mapText: { fontFamily: 'Manrope', fontSize: 12, color: '#bec9c1', marginTop: 4 },
+  distRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+  },
+  distItem: { alignItems: 'center' },
   distLabel: { fontFamily: 'Manrope', fontSize: 11, color: '#bec9c1' },
   distVal: { fontFamily: 'Manrope', fontSize: 16, fontWeight: '700' },
-  controls: { flex: 1, paddingHorizontal: 16, gap: 12 },
-  holeHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  holeTitle: { fontFamily: 'Newsreader', fontSize: 28, fontStyle: 'italic', color: '#dfe4dd' },
-  scorePill: { backgroundColor: '#1c211c', paddingHorizontal: 12, paddingVertical: 4, borderRadius: 20 },
-  scorePillText: { fontFamily: 'Manrope', fontSize: 13, fontWeight: '600' },
-  counterLabel: { fontFamily: 'Manrope', fontSize: 16, fontWeight: '600', color: '#dfe4dd' },
-  counterVal: { fontFamily: 'Manrope', fontSize: 30, fontWeight: '700', color: '#dfe4dd', minWidth: 50, textAlign: 'center' },
-  counterLabelSm: { fontFamily: 'Manrope', fontSize: 14, fontWeight: '600', color: '#dfe4dd' },
-  counterValSm: { fontFamily: 'Manrope', fontSize: 20, fontWeight: '700', color: '#dfe4dd', minWidth: 30, textAlign: 'center' },
-  minusBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#101511', borderWidth: 1, borderColor: '#3f4943', alignItems: 'center', justifyContent: 'center' },
-  plusBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: '#006747', alignItems: 'center', justifyContent: 'center' },
-  minusBtnSm: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#101511', borderWidth: 1, borderColor: '#3f4943', alignItems: 'center', justifyContent: 'center' },
-  plusBtnSm: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#006747', alignItems: 'center', justifyContent: 'center' },
-  penText: { fontFamily: 'Manrope', fontSize: 12, fontWeight: '600', color: '#e9c349', marginTop: 4 },
+  shotIndicator: {
+    fontFamily: 'Manrope',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#84d7af',
+    textAlign: 'center',
+    paddingBottom: 8,
+  },
+
+  // Score pill
+  scorePillRow: { alignItems: 'center', marginBottom: 8 },
+  scorePill: {
+    backgroundColor: '#1c211c',
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  scorePillText: { fontFamily: 'Manrope', fontSize: 14, fontWeight: '700' },
+
+  // Scorecard
+  scorecardWrap: {
+    backgroundColor: '#1c211c',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#3f4943',
+    padding: 8,
+  },
+
+  // Confirm button
+  confirmBtn: {
+    backgroundColor: '#006747',
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  confirmBtnText: {
+    fontFamily: 'Manrope',
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#84d7af',
+  },
 });
