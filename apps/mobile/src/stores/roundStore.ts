@@ -2,6 +2,25 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+// --- Corruption recovery constants ---
+
+export const SNAPSHOT_KEY = 'sticks-round-snapshot';
+export const CORRUPT_KEY = 'sticks-round-corrupt';
+
+// --- Validation ---
+
+export function validateRoundState(state: unknown): state is ActiveRound {
+  if (!state || typeof state !== 'object') return false;
+  const s = state as Record<string, unknown>;
+  return (
+    typeof s.id === 'string' &&
+    typeof s.courseName === 'string' &&
+    Array.isArray(s.holes) &&
+    s.holes.length === 18 &&
+    typeof s.currentHole === 'number'
+  );
+}
+
 export interface LocalHoleState {
   holeNumber: number;
   strokes: number;
@@ -110,9 +129,16 @@ export const useRoundStore = create<RoundState>()(
         set((state) => {
           if (!state.activeRound) return state;
           const next = Math.min(state.activeRound.currentHole + 1, 18);
-          return {
-            activeRound: { ...state.activeRound, currentHole: next },
-          };
+          const newRound = { ...state.activeRound, currentHole: next };
+
+          // Write snapshot every 3 holes for corruption recovery
+          if (state.activeRound.currentHole % 3 === 0) {
+            AsyncStorage.setItem(SNAPSHOT_KEY, JSON.stringify(newRound)).catch(() => {
+              // Best-effort snapshot write
+            });
+          }
+
+          return { activeRound: newRound };
         }),
 
       goToHole: (holeNumber) =>
@@ -195,6 +221,41 @@ export const useRoundStore = create<RoundState>()(
     {
       name: 'sticks-round-store',
       storage: createJSONStorage(() => AsyncStorage),
+      onRehydrateStorage: () => {
+        return async (state, error) => {
+          if (error || (state && state.activeRound && !validateRoundState(state.activeRound))) {
+            // Rehydration failed or state is corrupt — attempt snapshot recovery
+            try {
+              const snapshotRaw = await AsyncStorage.getItem(SNAPSHOT_KEY);
+              if (snapshotRaw) {
+                const snapshot = JSON.parse(snapshotRaw);
+                if (validateRoundState(snapshot)) {
+                  // Restore from snapshot
+                  useRoundStore.setState({ activeRound: snapshot });
+                  console.warn('[RoundStore] Recovered from snapshot after corruption');
+                  return;
+                }
+              }
+            } catch {
+              // Snapshot also failed
+            }
+
+            // Both persisted state and snapshot are invalid — preserve raw data
+            try {
+              const rawData = await AsyncStorage.getItem('sticks-round-store');
+              if (rawData) {
+                await AsyncStorage.setItem(CORRUPT_KEY, rawData);
+              }
+            } catch {
+              // Best-effort preservation
+            }
+
+            // Clear the active round so the app doesn't crash
+            useRoundStore.setState({ activeRound: null, syncStatus: 'synced' });
+            console.error('[RoundStore] Corruption detected. Raw data preserved in CORRUPT_KEY.');
+          }
+        };
+      },
     },
   ),
 );

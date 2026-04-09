@@ -41,8 +41,8 @@ export function computeTrackIntegrity(
   let gapPenalty = 0;
   for (let i = 1; i < sorted.length; i++) {
     const gap =
-      new Date(sorted[i].timestamp).getTime() -
-      new Date(sorted[i - 1].timestamp).getTime();
+      new Date(sorted[i]!.timestamp).getTime() -
+      new Date(sorted[i - 1]!.timestamp).getTime();
     if (gap > 10 * 60 * 1000) gapPenalty += 0.05;
   }
 
@@ -79,13 +79,47 @@ rounds.post("/", async (c) => {
 });
 
 // PUT /rounds/:id/holes/:num — upsert Hole record
+// Accepts `x-force` header for conflict resolution — when present, overwrites
+// server data unconditionally (used by sync queue on 409 conflicts).
 rounds.put("/:id/holes/:num", async (c) => {
   const roundId = c.req.param("id");
   const holeNumber = parseInt(c.req.param("num"), 10);
   const body = await c.req.json();
+  const forceOverwrite = c.req.header("x-force") === "true";
 
   if (isNaN(holeNumber) || holeNumber < 1) {
     return c.json({ error: "Invalid hole number", statusCode: 400 }, 400);
+  }
+
+  // When force header is present, overwrite server data unconditionally
+  if (forceOverwrite) {
+    const hole = await prisma.hole.upsert({
+      where: {
+        roundId_holeNumber: { roundId, holeNumber },
+      },
+      update: {
+        strokes: body.strokes ?? 0,
+        putts: body.putts ?? 0,
+        penalties: body.penalties ?? 0,
+        gpsTimestamp: body.gpsTimestamp ? new Date(body.gpsTimestamp) : null,
+        par: body.par ?? null,
+        fairwayHit: body.fairwayHit ?? null,
+        gir: body.gir ?? null,
+      },
+      create: {
+        roundId,
+        holeNumber,
+        strokes: body.strokes ?? 0,
+        putts: body.putts ?? 0,
+        penalties: body.penalties ?? 0,
+        gpsTimestamp: body.gpsTimestamp ? new Date(body.gpsTimestamp) : null,
+        par: body.par ?? null,
+        fairwayHit: body.fairwayHit ?? null,
+        gir: body.gir ?? null,
+      },
+    });
+
+    return c.json(hole);
   }
 
   const hole = await prisma.hole.upsert({

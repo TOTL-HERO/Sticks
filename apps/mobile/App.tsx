@@ -1,10 +1,12 @@
 import { StatusBar } from 'expo-status-bar';
+import { useEffect } from 'react';
 import { useFonts } from 'expo-font';
 import { View, Text, StyleSheet } from 'react-native';
 import { NavigationContainer, DefaultTheme } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { RootNavigator } from './src/navigation/RootNavigator';
+import { initOneSignal } from './src/services/pushNotifications';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +37,14 @@ export default function App() {
     'Manrope-SemiBold': require('./assets/fonts/Manrope-SemiBold.ttf'),
     'Manrope-Bold': require('./assets/fonts/Manrope-Bold.ttf'),
   });
+
+  // Initialize OneSignal on mount (no-op in Expo Go, real in dev build)
+  useEffect(() => {
+    const appId = process.env.EXPO_PUBLIC_ONESIGNAL_APP_ID;
+    if (appId) {
+      initOneSignal(appId);
+    }
+  }, []);
 
   if (!fontsLoaded) {
     return (

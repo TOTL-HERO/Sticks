@@ -1,4 +1,5 @@
 import { apiFetch } from '../lib/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // --- Types ---
 
@@ -26,11 +27,42 @@ export interface DistanceResult {
   back: number;
 }
 
+// --- Geometry types ---
+
+export interface HazardZone {
+  type: 'bunker' | 'water' | 'lateral_water' | 'out_of_bounds';
+  outline: { lat: number; lng: number }[];
+}
+
+export interface HoleGeometry {
+  holeNumber: number;
+  par: number;
+  yardage: number;
+  teeBox: { lat: number; lng: number };
+  fairwayOutline: { lat: number; lng: number }[];
+  greenOutline: { lat: number; lng: number }[];
+  hazards: HazardZone[];
+  greenCenter: { lat: number; lng: number };
+  greenFront: { lat: number; lng: number };
+  greenBack: { lat: number; lng: number };
+}
+
+export interface CourseGeometry {
+  courseId: string;
+  holes: HoleGeometry[];
+  cachedAt: number; // Date.now() timestamp
+  provider: 'golfcourseapi' | 'igolf';
+}
+
+const GEOMETRY_CACHE_PREFIX = 'course-geometry-';
+const GEOMETRY_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
 // --- Interface ---
 
 export interface CourseDataProvider {
   searchCourses(query: string, lat?: number, lng?: number): Promise<Course[]>;
   getDistanceToPin(lat: number, lng: number, holeData: HoleLayout): DistanceResult;
+  getCourseGeometry(courseId: string): Promise<CourseGeometry | null>;
 }
 
 // --- Haversine helper (meters) ---
@@ -75,6 +107,57 @@ export class GolfCourseApiProvider implements CourseDataProvider {
       center: metersToYards(haversineMeters(lat, lng, holeData.greenCenter.lat, holeData.greenCenter.lng)),
       back: metersToYards(haversineMeters(lat, lng, holeData.greenBack.lat, holeData.greenBack.lng)),
     };
+  }
+
+  async getCourseGeometry(courseId: string): Promise<CourseGeometry | null> {
+    const cacheKey = `${GEOMETRY_CACHE_PREFIX}${courseId}`;
+
+    // Check local cache first
+    try {
+      const cached = await AsyncStorage.getItem(cacheKey);
+      if (cached) {
+        const parsed: CourseGeometry = JSON.parse(cached);
+        const age = Date.now() - parsed.cachedAt;
+        if (age < GEOMETRY_TTL_MS) {
+          return parsed;
+        }
+        // Cache expired — will try to fetch fresh, but keep stale as fallback
+      }
+    } catch {
+      // Cache read failed — proceed to fetch
+    }
+
+    // Fetch from API
+    try {
+      const res = await apiFetch<CourseGeometry>(`/courses/${courseId}/geometry`);
+      const geometry: CourseGeometry = {
+        ...res,
+        courseId,
+        cachedAt: Date.now(),
+        provider: res.provider ?? 'golfcourseapi',
+      };
+
+      // Cache the result
+      try {
+        await AsyncStorage.setItem(cacheKey, JSON.stringify(geometry));
+      } catch {
+        // Cache write failure — geometry still usable in memory
+      }
+
+      return geometry;
+    } catch {
+      // Fetch failed — try returning stale cache
+      try {
+        const stale = await AsyncStorage.getItem(cacheKey);
+        if (stale) {
+          return JSON.parse(stale) as CourseGeometry;
+        }
+      } catch {
+        // Stale cache also unavailable
+      }
+
+      return null;
+    }
   }
 }
 

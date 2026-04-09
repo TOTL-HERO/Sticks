@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { useAuth } from '../hooks/useAuth';
 import { apiFetch } from '../lib/api';
+import { setOneSignalExternalUserId } from '../services/pushNotifications';
 import { AuthStack } from './AuthStack';
 import { OnboardingStack } from './OnboardingStack';
 import { BottomTabNavigator } from './BottomTabNavigator';
@@ -43,6 +44,8 @@ export function RootNavigator() {
           clearTimeout(timeout);
           setOnboardingStep(profile.onboardingStep ?? 0);
           setProfileLoading(false);
+          // Associate user with OneSignal for push notifications
+          setOneSignalExternalUserId(profile.id);
         }
       })
       .catch((err) => {

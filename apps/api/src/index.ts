@@ -7,6 +7,7 @@ import feedRoutes from "./routes/feed.ts";
 import leaderboardRoutes from "./routes/leaderboard.ts";
 import teeTimesRoutes from "./routes/tee-times.ts";
 import coursesRoutes from "./routes/courses.ts";
+import bookingsRoutes from "./routes/bookings.ts";
 
 // Initialize Sentry
 if (process.env.SENTRY_DSN) {
@@ -39,6 +40,7 @@ app.route("/feed", feedRoutes);
 app.route("/leaderboard", leaderboardRoutes);
 app.route("/tee-times", teeTimesRoutes);
 app.route("/courses", coursesRoutes);
+app.route("/bookings", bookingsRoutes);
 
 // Global error handler
 app.onError((err, c) => {

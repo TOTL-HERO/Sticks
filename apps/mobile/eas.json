@@ -13,6 +13,13 @@
         "APP_ENV": "development"
       }
     },
+    "development-device": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "env": {
+        "APP_ENV": "development"
+      }
+    },
     "preview": {
       "distribution": "internal",
       "ios": {

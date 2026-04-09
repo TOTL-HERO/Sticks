@@ -75,6 +75,30 @@ enum ShotEventType {
   ROUND_END
 }
 
+enum BookingProvider {
+  FOREUP
+  GOLFNOW
+}
+
+enum ReminderType {
+  TWENTY_FOUR_HOUR
+  TWO_HOUR
+}
+
+enum ReminderStatus {
+  SCHEDULED
+  DELIVERED
+  CANCELLED
+  FAILED
+}
+
+enum RefundStatus {
+  NONE
+  PENDING
+  COMPLETED
+  FAILED
+}
+
 // ─── Core Entities ───────────────────────────────────────────────────────────
 
 model User {
@@ -99,6 +123,7 @@ model User {
   crewMemberships   CrewMember[]
   following         Follow[]    @relation("follower")
   followers         Follow[]    @relation("following")
+  bookings          TeeTime[]
 }
 
 model Follow {
@@ -292,15 +317,52 @@ model CrewMember {
 }
 
 model TeeTime {
-  id             String        @id @default(uuid())
-  courseName     String
-  datetime       DateTime
-  availableSpots Int
-  price          Float
-  bookingStatus  BookingStatus @default(AVAILABLE)
-  foreupRefId    String?
-  createdAt      DateTime      @default(now())
-  updatedAt      DateTime      @updatedAt
+  id                 String           @id @default(uuid())
+  courseName         String
+  courseId            String?
+  datetime           DateTime
+  availableSpots     Int
+  price              Float
+  bookingStatus      BookingStatus    @default(AVAILABLE)
+  provider           BookingProvider?
+  providerRefId      String?
+  bookerId           String?
+  playerCount        Int?
+  paymentAmount      Float?
+  commissionAmount   Float?
+  refundStatus       RefundStatus     @default(NONE)
+  cancelledAt        DateTime?
+  confirmationNumber String?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  booker    User?      @relation(fields: [bookerId], references: [id])
+  reminders Reminder[]
+}
+
+model Reminder {
+  id           String         @id @default(uuid())
+  teeTimeId    String
+  oneSignalId  String?
+  scheduledAt  DateTime
+  reminderType ReminderType
+  status       ReminderStatus @default(SCHEDULED)
+  deliveredAt  DateTime?
+  createdAt    DateTime       @default(now())
+
+  teeTime TeeTime @relation(fields: [teeTimeId], references: [id])
+
+  @@index([teeTimeId])
+}
+
+model CourseGeometryCache {
+  id             String   @id @default(uuid())
+  courseId        String   @unique
+  providerSource String
+  geometryData   Json
+  expiresAt      DateTime
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
 
 model ShotTrack {

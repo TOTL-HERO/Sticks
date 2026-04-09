@@ -206,5 +206,38 @@ export async function stopBackgroundLocationTask(): Promise<void> {
   }
 }
 
+/** Check if the background task is still alive and restart if needed */
+export async function checkAndRecoverTask(): Promise<{ recovered: boolean; gapMs: number | null }> {
+  const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
+  if (isRegistered) return { recovered: false, gapMs: null };
+
+  const { activeRound } = useRoundStore.getState();
+  if (!activeRound) return { recovered: false, gapMs: null };
+
+  // Calculate gap from last known shot timestamp
+  const lastShot = activeRound.shotPoints[activeRound.shotPoints.length - 1];
+  const gapMs = lastShot ? Date.now() - new Date(lastShot.timestamp).getTime() : null;
+
+  // Log time-gap marker if gap exceeds 30 seconds
+  if (gapMs && gapMs > 30_000) {
+    useRoundStore.getState().addShotPoint({
+      id: generateId(),
+      holeNumber: activeRound.currentHole,
+      shotNumber: 0,
+      startLatitude: 0,
+      startLongitude: 0,
+      endLatitude: null,
+      endLongitude: null,
+      timestamp: new Date().toISOString(),
+      eventType: 'ROUND_START', // reused as gap marker
+      accuracy: 0,
+      altitude: null,
+    });
+  }
+
+  await registerBackgroundLocationTask();
+  return { recovered: true, gapMs };
+}
+
 // Exported for testing
 export { haversineMeters, generateId, handleLocationUpdate, locationBuffer, allSamplesWithinThreshold, STILLNESS_DISTANCE_M, STILLNESS_DURATION_MS, BUFFER_SIZE };

@@ -9,7 +9,9 @@ import {
   Alert,
   Platform,
   PanResponder,
+  AppState,
 } from 'react-native';
+import type { AppStateStatus } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import * as Location from 'expo-location';
@@ -17,24 +19,16 @@ import { useNavigation } from '@react-navigation/native';
 import { useRoundStore, type SyncStatus } from '../../stores/roundStore';
 import { useAppStore } from '../../stores/appStore';
 import { apiFetch } from '../../lib/api';
-import { startSyncQueue, stopSyncQueue, syncPendingHoles, syncPendingShots } from '../../services/syncQueue';
-import { registerBackgroundLocationTask } from '../../services/backgroundLocation';
+import { startSyncQueue, stopSyncQueue, syncPendingHoles, syncPendingShots, flushSyncQueue } from '../../services/syncQueue';
+import { registerBackgroundLocationTask, checkAndRecoverTask } from '../../services/backgroundLocation';
+import { getCourseDataProvider, type HoleGeometry, type CourseGeometry, type DistanceResult } from '../../services/courseDataProvider';
+import { CourseMapOverlay } from '../../components/CourseMapOverlay';
 import { HoleRow } from './HoleRow';
 import { ScoreStepperCard } from './ScoreStepperCard';
 import { SecondaryStatsPanel } from './SecondaryStatsPanel';
 import { HoleConfirmationSheet } from './HoleConfirmationSheet';
 
-const MOCK_DISTANCES: Record<number, { front: number; center: number; back: number }> = {
-  1: { front: 145, center: 158, back: 172 }, 2: { front: 132, center: 147, back: 160 },
-  3: { front: 178, center: 192, back: 205 }, 4: { front: 110, center: 125, back: 138 },
-  5: { front: 155, center: 168, back: 182 }, 6: { front: 190, center: 204, back: 218 },
-  7: { front: 98, center: 112, back: 124 }, 8: { front: 165, center: 179, back: 193 },
-  9: { front: 142, center: 156, back: 170 }, 10: { front: 151, center: 164, back: 178 },
-  11: { front: 188, center: 201, back: 215 }, 12: { front: 120, center: 134, back: 148 },
-  13: { front: 173, center: 187, back: 200 }, 14: { front: 105, center: 118, back: 131 },
-  15: { front: 160, center: 174, back: 188 }, 16: { front: 195, center: 210, back: 224 },
-  17: { front: 137, center: 150, back: 163 }, 18: { front: 148, center: 162, back: 176 },
-};
+const DEFAULT_DISTANCES: DistanceResult = { front: 150, center: 165, back: 180 };
 
 function SyncStatusBadge({ status }: { status: SyncStatus }) {
   if (status === 'synced')
@@ -74,10 +68,13 @@ export function ScoringScreen() {
 
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [sheetVisible, setSheetVisible] = useState(false);
+  const [courseGeometry, setCourseGeometry] = useState<CourseGeometry | null>(null);
+  const [distances, setDistances] = useState<DistanceResult>(DEFAULT_DISTANCES);
 
   const currentHole = activeRound?.currentHole ?? 1;
   const holeData = activeRound?.holes.find((h) => h.holeNumber === currentHole);
-  const distances = MOCK_DISTANCES[currentHole] ?? { front: 150, center: 165, back: 180 };
+  const currentHoleGeometry: HoleGeometry | null =
+    courseGeometry?.holes.find((h) => h.holeNumber === currentHole) ?? null;
 
   // Shot count for current hole
   const shotCount =
@@ -137,6 +134,46 @@ export function ScoringScreen() {
   useEffect(() => {
     startSyncQueue();
     return () => stopSyncQueue();
+  }, []);
+
+  // --- Fetch course geometry on round start ---
+  useEffect(() => {
+    if (!activeRound?.courseId) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const provider = getCourseDataProvider();
+        const geom = await provider.getCourseGeometry(activeRound.courseId!);
+        if (!cancelled && geom) setCourseGeometry(geom);
+      } catch {
+        // Geometry fetch failed — map will show fallback
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [activeRound?.courseId]);
+
+  // --- AppState listener for background task recovery ---
+  useEffect(() => {
+    const appStateRef = { current: AppState.currentState };
+
+    const handleAppStateChange = async (nextState: AppStateStatus) => {
+      if (appStateRef.current.match(/inactive|background/) && nextState === 'active') {
+        // App came to foreground — check if background task needs recovery
+        try {
+          const result = await checkAndRecoverTask();
+          if (result.recovered) {
+            // Task was recovered — flush sync queue
+            flushSyncQueue();
+          }
+        } catch {
+          // Recovery check failed — non-critical
+        }
+      }
+      appStateRef.current = nextState;
+    };
+
+    const subscription = AppState.addEventListener('change', handleAppStateChange);
+    return () => subscription.remove();
   }, []);
 
   // --- Stepper handlers ---
@@ -271,10 +308,16 @@ export function ScoringScreen() {
         >
           {/* 2. GPS Section */}
           <View style={s.gpsSection}>
-            <View style={s.mapPlaceholder}>
-              <MaterialCommunityIcons name="map-marker-radius" size={36} color="#006747" />
-              <Text style={s.mapText}>GPS Active</Text>
-            </View>
+            <CourseMapOverlay
+              holeGeometry={currentHoleGeometry}
+              userLocation={
+                location
+                  ? { latitude: location.coords.latitude, longitude: location.coords.longitude }
+                  : null
+              }
+              distances={distances}
+              onDistanceUpdate={setDistances}
+            />
             <View style={s.distRow}>
               <View style={s.distItem}>
                 <Text style={s.distLabel}>FRONT</Text>
@@ -397,13 +440,6 @@ const s = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: 12,
   },
-  mapPlaceholder: {
-    height: 100,
-    backgroundColor: '#0a1a10',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mapText: { fontFamily: 'Manrope', fontSize: 12, color: '#bec9c1', marginTop: 4 },
   distRow: {
     flexDirection: 'row',
     justifyContent: 'space-around',

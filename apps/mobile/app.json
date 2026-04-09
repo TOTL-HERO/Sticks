@@ -16,8 +16,10 @@
       "bundleIdentifier": "com.sticks.golf",
       "supportsTablet": true,
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Sticks uses your location to calculate distance to the pin during golf rounds.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Sticks uses background location to keep tracking your round even with the screen locked."
+        "NSLocationWhenInUseUsageDescription": "Sticks uses your GPS location as a golf rangefinder to calculate distance to the pin, front, center, and back of the green during your round.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Sticks uses background GPS to keep calculating distances and tracking your shot trail even with the screen locked during a round.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "UIBackgroundModes": ["location"]
       }
     },
     "android": {
@@ -30,7 +32,9 @@
       "permissions": [
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
+        "ACCESS_BACKGROUND_LOCATION",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
       ]
     },
     "web": {
@@ -42,6 +46,11 @@
       "expo-web-browser",
       "expo-secure-store"
     ],
-    "scheme": "com.sticks.golf"
+    "scheme": "com.sticks.golf",
+    "extra": {
+      "eas": {
+        "projectId": "b58bb85f-75ee-4b4d-b535-1b72ed1104e5"
+      }
+    }
   }
 }
