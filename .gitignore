@@ -1,0 +1,13 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+dist/
+out/
+coverage/
+.expo/
+apps/mobile/.expo/
+apps/api/generated/
+apps/api/bun.lockb

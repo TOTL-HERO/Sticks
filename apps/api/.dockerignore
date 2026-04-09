@@ -1,0 +1,15 @@
+node_modules
+.env
+.env.*
+.git
+.gitignore
+*.md
+.DS_Store
+.idea
+coverage
+dist
+out
+*.tgz
+*.lcov
+logs
+*.log

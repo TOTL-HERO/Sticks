@@ -1,0 +1,291 @@
+// Sticks M1 Foundation — Prisma Schema
+// Datasource: Supabase Postgres via DATABASE_URL env var
+// Runtime: Bun
+
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+  runtime  = "bun"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ───────────────────────────────────────────────────────────────────
+
+enum PlayStyle {
+  COMPETITIVE
+  CASUAL
+  SOCIAL
+}
+
+enum MembershipTier {
+  FREE
+  FAIRWAY
+  EAGLE
+  TOUR
+}
+
+enum ScoringMode {
+  STROKE_PLAY
+  MATCH_PLAY
+  STABLEFORD
+  SCRAMBLE
+  BEST_BALL
+}
+
+enum FeedEventType {
+  ROUND_COMPLETED
+  LEADERBOARD_MOVE
+  BET_SETTLED
+  TOURNAMENT_RESULT
+  CREW_ACTIVITY
+  RIVALRY_MILESTONE
+  BRACKET_ADVANCEMENT
+}
+
+enum BetStatus {
+  ACTIVE
+  SETTLED
+  DISPUTED
+  CANCELLED
+}
+
+enum BookingStatus {
+  AVAILABLE
+  HELD
+  BOOKED
+  CANCELLED
+}
+
+enum TournamentStatus {
+  DRAFT
+  REGISTRATION_OPEN
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+// ─── Core Entities ───────────────────────────────────────────────────────────
+
+model User {
+  id             String         @id @default(uuid())
+  authId         String         @unique
+  firstName      String
+  lastName       String
+  avatarUrl      String?
+  ghinIndex      Float?
+  homeCourseId   String?
+  homeCourseName String?
+  playStyle      PlayStyle?
+  membershipTier MembershipTier @default(FREE)
+  onboardingStep Int            @default(0)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  rounds            RoundPlayer[]
+  feedEvents        FeedEvent[]
+  tournamentEntries TournamentEntry[]
+  betsAsPlayer      BetPlayer[]
+  crewMemberships   CrewMember[]
+  following         Follow[]    @relation("follower")
+  followers         Follow[]    @relation("following")
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower  User @relation("follower", fields: [followerId], references: [id])
+  following User @relation("following", fields: [followingId], references: [id])
+
+  @@unique([followerId, followingId])
+}
+
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  logoUrl     String?
+  colorScheme Json?
+  domain      String?
+  tier        String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tournaments Tournament[]
+  seasons     Season[]
+  feedEvents  FeedEvent[]
+}
+
+model Tournament {
+  id             String           @id @default(uuid())
+  organizationId String
+  seasonId       String?
+  name           String
+  format         ScoringMode      @default(STROKE_PLAY)
+  handicapMode   String?
+  status         TournamentStatus @default(DRAFT)
+  flightConfig   Json?
+  prizePool      Float?
+  startDate      DateTime?
+  endDate        DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id])
+  season       Season?          @relation(fields: [seasonId], references: [id])
+  entries      TournamentEntry[]
+  rounds       Round[]
+}
+
+model TournamentEntry {
+  id            String   @id @default(uuid())
+  tournamentId  String
+  userId        String
+  flight        String?
+  tee           String?
+  paymentStatus String?
+  score         Int?
+  bracketPos    Int?
+  createdAt     DateTime @default(now())
+
+  tournament Tournament @relation(fields: [tournamentId], references: [id])
+  user       User       @relation(fields: [userId], references: [id])
+
+  @@unique([tournamentId, userId])
+}
+
+model Season {
+  id              String   @id @default(uuid())
+  organizationId  String
+  name            String
+  pointsSystem    Json?
+  dropWorstRounds Int?
+  startDate       DateTime?
+  endDate         DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  tournaments  Tournament[]
+}
+
+model Round {
+  id            String      @id @default(uuid())
+  courseId       String?
+  courseName     String
+  coursePar      Int         @default(72)
+  tournamentId   String?
+  scoringMode    ScoringMode @default(STROKE_PLAY)
+  startedAt      DateTime    @default(now())
+  endedAt        DateTime?
+  totalScore     Int?
+  scoreRelToPar  Int?
+  isFinalized    Boolean     @default(false)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  tournament Tournament? @relation(fields: [tournamentId], references: [id])
+  holes      Hole[]
+  players    RoundPlayer[]
+}
+
+model RoundPlayer {
+  id      String @id @default(uuid())
+  roundId String
+  userId  String
+
+  round Round @relation(fields: [roundId], references: [id])
+  user  User  @relation(fields: [userId], references: [id])
+
+  @@unique([roundId, userId])
+}
+
+model Hole {
+  id           String    @id @default(uuid())
+  roundId      String
+  holeNumber   Int
+  strokes      Int       @default(0)
+  putts        Int       @default(0)
+  penalties    Int       @default(0)
+  gpsTimestamp DateTime?
+  par          Int?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  round Round @relation(fields: [roundId], references: [id])
+
+  @@unique([roundId, holeNumber])
+}
+
+model FeedEvent {
+  id             String        @id @default(uuid())
+  eventType      FeedEventType
+  actorId        String
+  organizationId String?
+  payload        Json
+  createdAt      DateTime      @default(now())
+
+  actor        User          @relation(fields: [actorId], references: [id])
+  organization Organization? @relation(fields: [organizationId], references: [id])
+}
+
+model Bet {
+  id           String    @id @default(uuid())
+  format       String
+  pot          Float     @default(0)
+  status       BetStatus @default(ACTIVE)
+  stripeIntent String?
+  roundId      String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  players BetPlayer[]
+}
+
+model BetPlayer {
+  id     String @id @default(uuid())
+  betId  String
+  userId String
+
+  bet  Bet  @relation(fields: [betId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([betId, userId])
+}
+
+model Crew {
+  id        String   @id @default(uuid())
+  name      String
+  imageUrl  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members CrewMember[]
+}
+
+model CrewMember {
+  id     String @id @default(uuid())
+  crewId String
+  userId String
+
+  crew Crew @relation(fields: [crewId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([crewId, userId])
+}
+
+model TeeTime {
+  id             String        @id @default(uuid())
+  courseName     String
+  datetime       DateTime
+  availableSpots Int
+  price          Float
+  bookingStatus  BookingStatus @default(AVAILABLE)
+  foreupRefId    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}

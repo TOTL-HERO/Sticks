@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Sticks",
+    "slug": "sticks",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#101511"
+    },
+    "ios": {
+      "bundleIdentifier": "com.sticks.golf",
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Sticks uses your location to calculate distance to the pin during golf rounds.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Sticks uses background location to keep tracking your round even with the screen locked."
+      }
+    },
+    "android": {
+      "package": "com.sticks.golf",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#101511"
+      },
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-font",
+      "expo-location",
+      "expo-web-browser",
+      "expo-secure-store"
+    ],
+    "scheme": "com.sticks.golf"
+  }
+}
