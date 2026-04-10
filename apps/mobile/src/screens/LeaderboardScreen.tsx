@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../lib/api';
 import { supabase } from '../lib/supabase';
 import { Card } from '../components/Card';
+import { SkeletonList } from '../components/Skeleton';
 
 type Period = 'week' | 'month' | 'all';
 interface LeaderboardEntry { userId: string; firstName: string; lastName: string; avatarUrl: string | null; scoreRelToPar: number; totalScore: number; courseName: string; rank: number; }
@@ -66,7 +67,7 @@ export function LeaderboardScreen() {
       </View>
 
       {isLoading ? (
-        <View style={styles.center}><ActivityIndicator size="large" color="#84d7af" /></View>
+        <View style={{ paddingTop: 16 }}><SkeletonList count={6} /></View>
       ) : error ? (
         <View style={styles.center}><MaterialCommunityIcons name="alert-circle-outline" size={48} color="#ffb4ab" /><Text style={styles.errorText}>Could not load leaderboard</Text></View>
       ) : entries.length === 0 ? (

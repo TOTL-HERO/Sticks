@@ -46,6 +46,8 @@ export interface ShotPoint {
   accuracy: number;
   altitude: number | null;
   synced: boolean;
+  club?: string;
+  shotMeta?: { shape?: string; lie?: string; contact?: string };
 }
 
 export interface ActiveRound {

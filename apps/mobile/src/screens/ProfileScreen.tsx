@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components/Card';
+import { SkeletonProfile, SkeletonList } from '../components/Skeleton';
 import { apiFetch } from '../lib/api';
 import { useAuth } from '../hooks/useAuth';
 
@@ -76,7 +77,12 @@ export function ProfileScreen() {
   }, [handleRoundPress]);
 
   if (isLoading) {
-    return (<SafeAreaView style={styles.safe} edges={['top']}><View style={styles.center}><ActivityIndicator size="large" color="#84d7af" /></View></SafeAreaView>);
+    return (
+      <SafeAreaView style={styles.safe} edges={['top']}>
+        <SkeletonProfile />
+        <SkeletonList count={3} />
+      </SafeAreaView>
+    );
   }
 
   const displayName = profile ? `${profile.firstName} ${profile.lastName}`.trim() || 'Golfer' : 'Golfer';

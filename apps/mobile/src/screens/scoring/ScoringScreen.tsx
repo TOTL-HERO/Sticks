@@ -27,6 +27,7 @@ import { HoleRow } from './HoleRow';
 import { ScoreStepperCard } from './ScoreStepperCard';
 import { SecondaryStatsPanel } from './SecondaryStatsPanel';
 import { HoleConfirmationSheet } from './HoleConfirmationSheet';
+import { ManualShotTracker } from './ManualShotTracker';
 
 const DEFAULT_DISTANCES: DistanceResult = { front: 150, center: 165, back: 180 };
 
@@ -70,6 +71,9 @@ export function ScoringScreen() {
   const [sheetVisible, setSheetVisible] = useState(false);
   const [courseGeometry, setCourseGeometry] = useState<CourseGeometry | null>(null);
   const [distances, setDistances] = useState<DistanceResult>(DEFAULT_DISTANCES);
+  const [trackerVisible, setTrackerVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const currentHole = activeRound?.currentHole ?? 1;
   const holeData = activeRound?.holes.find((h) => h.holeNumber === currentHole);
@@ -274,6 +278,14 @@ export function ScoringScreen() {
     [goToHole],
   );
 
+  // --- Manual shot tracker ---
+  const handleShotSaved = useCallback((summary: string) => {
+    setTrackerVisible(false);
+    setToastMessage(summary);
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+    toastTimeout.current = setTimeout(() => setToastMessage(null), 2500);
+  }, []);
+
   // --- No active round ---
   if (!activeRound || !holeData) {
     return (
@@ -404,6 +416,32 @@ export function ScoringScreen() {
           onSave={handleSheetSave}
           onDismiss={() => setSheetVisible(false)}
         />
+
+        {/* Manual Shot Tracker */}
+        <ManualShotTracker
+          visible={trackerVisible}
+          onClose={() => setTrackerVisible(false)}
+          onShotSaved={handleShotSaved}
+        />
+
+        {/* Track Shot FAB */}
+        {!trackerVisible && (
+          <TouchableOpacity
+            style={s.fab}
+            onPress={() => setTrackerVisible(true)}
+            activeOpacity={0.8}
+          >
+            <MaterialCommunityIcons name="crosshairs-gps" size={22} color="#101511" />
+          </TouchableOpacity>
+        )}
+
+        {/* Toast */}
+        {toastMessage && (
+          <View style={s.toast}>
+            <MaterialCommunityIcons name="golf-tee" size={16} color="#84d7af" />
+            <Text style={s.toastText}>{toastMessage}</Text>
+          </View>
+        )}
       </View>
     </SafeAreaView>
   );
@@ -490,5 +528,47 @@ const s = StyleSheet.create({
     fontSize: 16,
     fontWeight: '700',
     color: '#84d7af',
+  },
+
+  // Track Shot FAB
+  fab: {
+    position: 'absolute',
+    bottom: 24,
+    right: 20,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#84d7af',
+    alignItems: 'center',
+    justifyContent: 'center',
+    elevation: 6,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    zIndex: 50,
+  },
+
+  // Toast
+  toast: {
+    position: 'absolute',
+    bottom: 90,
+    alignSelf: 'center',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#1c211c',
+    borderWidth: 1,
+    borderColor: '#3f4943',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 20,
+    zIndex: 60,
+  },
+  toastText: {
+    fontFamily: 'Manrope',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#dfe4dd',
   },
 });

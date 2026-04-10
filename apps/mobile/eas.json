@@ -48,9 +48,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "APPLE_ID",
-        "ascAppId": "ASC_APP_ID",
-        "appleTeamId": "APPLE_TEAM_ID"
+        "ascApiKeyId": "9VB7Z6HLDK",
+        "ascApiKeyIssuerId": "63a8d57e-73ab-4f08-9341-ec628de266bd",
+        "ascApiKeyPath": "./AuthKey_9VB7Z6HLDK.p8"
       },
       "android": {
         "serviceAccountKeyPath": "./google-services.json"

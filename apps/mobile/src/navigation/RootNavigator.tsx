@@ -71,7 +71,11 @@ export function RootNavigator() {
     return (
       <View style={s.loading}>
         <Text style={s.title}>STICKS</Text>
-        <Text style={s.sub}>Loading...</Text>
+        <View style={s.loadingDots}>
+          <View style={s.dot} />
+          <View style={[s.dot, { opacity: 0.6 }]} />
+          <View style={[s.dot, { opacity: 0.3 }]} />
+        </View>
       </View>
     );
   }
@@ -94,6 +98,7 @@ export function RootNavigator() {
 
 const s = StyleSheet.create({
   loading: { flex: 1, backgroundColor: '#101511', alignItems: 'center', justifyContent: 'center' },
-  title: { color: '#dfe4dd', fontSize: 32, fontStyle: 'italic', fontFamily: 'Newsreader' },
-  sub: { color: '#bec9c1', fontSize: 16, marginTop: 12, fontFamily: 'Manrope' },
+  title: { color: '#84d7af', fontSize: 36, fontStyle: 'italic', fontFamily: 'Newsreader', letterSpacing: 4 },
+  loadingDots: { flexDirection: 'row', gap: 8, marginTop: 24 },
+  dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#84d7af' },
 });

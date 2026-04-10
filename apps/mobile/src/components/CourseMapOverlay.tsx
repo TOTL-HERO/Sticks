@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import type { HoleGeometry, DistanceResult } from '../services/courseDataProvider';
@@ -57,6 +57,37 @@ export function CourseMapOverlay({
   distances,
   onDistanceUpdate,
 }: CourseMapOverlayProps) {
+  // Draggable target marker state
+  const [targetCoord, setTargetCoord] = useState<{ latitude: number; longitude: number } | null>(null);
+  const prevHoleRef = useRef<number | null>(null);
+
+  // Reset target to green center when hole changes
+  useEffect(() => {
+    const holeNum = holeGeometry?.holeNumber ?? null;
+    if (holeNum !== prevHoleRef.current) {
+      prevHoleRef.current = holeNum;
+      if (holeGeometry) {
+        setTargetCoord({
+          latitude: holeGeometry.greenCenter.lat,
+          longitude: holeGeometry.greenCenter.lng,
+        });
+      } else {
+        setTargetCoord(null);
+      }
+    }
+  }, [holeGeometry]);
+
+  // Distance from user to draggable target
+  const targetDistanceYds = useMemo(() => {
+    if (!userLocation || !targetCoord) return null;
+    return metersToYards(
+      haversineMeters(
+        userLocation.latitude, userLocation.longitude,
+        targetCoord.latitude, targetCoord.longitude,
+      ),
+    );
+  }, [userLocation, targetCoord]);
+
   // Recalculate distances when user location changes
   useEffect(() => {
     if (!userLocation || !holeGeometry || !onDistanceUpdate) return;
@@ -209,6 +240,27 @@ export function CourseMapOverlay({
             <MaterialCommunityIcons name="flag-variant" size={20} color="#ffb4ab" />
           </Marker>
         )}
+
+        {/* Draggable target marker */}
+        {targetCoord && (
+          <Marker
+            coordinate={targetCoord}
+            draggable
+            onDragEnd={(e: any) => {
+              setTargetCoord(e.nativeEvent.coordinate);
+            }}
+            anchor={{ x: 0.5, y: 0.5 }}
+          >
+            <View style={styles.targetMarkerWrap}>
+              <MaterialCommunityIcons name="crosshairs" size={28} color="#e9c349" />
+              {targetDistanceYds != null && (
+                <View style={styles.targetBadge}>
+                  <Text style={styles.targetBadgeText}>{targetDistanceYds} yds</Text>
+                </View>
+              )}
+            </View>
+          </Marker>
+        )}
       </MapView>
 
       {/* Overlay message when no geometry */}
@@ -283,5 +335,25 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     borderRadius: 8,
     overflow: 'hidden',
+  },
+
+  // Draggable target
+  targetMarkerWrap: {
+    alignItems: 'center',
+  },
+  targetBadge: {
+    backgroundColor: 'rgba(16, 21, 17, 0.85)',
+    borderWidth: 1,
+    borderColor: '#e9c349',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    marginTop: 2,
+  },
+  targetBadgeText: {
+    fontFamily: 'Manrope',
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#e9c349',
   },
 });

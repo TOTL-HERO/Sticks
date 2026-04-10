@@ -6,6 +6,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { TopAppBar } from '../components/TopAppBar';
 import { Card } from '../components/Card';
+import { SkeletonList } from '../components/Skeleton';
 import { apiFetch } from '../lib/api';
 import { supabase } from '../lib/supabase';
 
@@ -113,7 +114,7 @@ export function HomeScreen() {
     <SafeAreaView style={styles.safe} edges={['top']}>
       <TopAppBar />
       {isLoading && events.length === 0 ? (
-        <View style={styles.center}><ActivityIndicator size="large" color="#84d7af" /></View>
+        <View style={{ paddingTop: 16 }}>{renderHeader()}<SkeletonList count={5} /></View>
       ) : error && events.length === 0 ? (
         <>{renderHeader()}<View style={styles.center}><MaterialCommunityIcons name="alert-circle-outline" size={48} color="#ffb4ab" /><Text style={styles.errorText}>Could not load feed</Text></View></>
       ) : (
