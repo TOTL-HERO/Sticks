@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/bun";
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { authMiddleware } from "./middleware/auth.ts";
 import usersRoutes from "./routes/users.ts";
 import roundsRoutes from "./routes/rounds.ts";
@@ -22,6 +23,13 @@ if (process.env.SENTRY_DSN) {
 }
 
 const app = new Hono();
+
+// Enable CORS for web clients
+app.use("*", cors({
+  origin: "*",
+  allowMethods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowHeaders: ["Content-Type", "Authorization"],
+}));
 
 // Health check — no auth required
 app.get("/health", (c) => {

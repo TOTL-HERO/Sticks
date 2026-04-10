@@ -1,21 +1,33 @@
 import { useEffect, useState, useCallback } from 'react';
-import { Alert } from 'react-native';
-import * as Google from 'expo-auth-session/providers/google';
+import { Alert, Platform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { supabase } from '../lib/supabase';
 import type { Session } from '@supabase/supabase-js';
+
+// Only import Google auth on native (crashes on web without webClientId)
+let GoogleAuth: typeof import('expo-auth-session/providers/google') | null = null;
+if (Platform.OS !== 'web') {
+  GoogleAuth = require('expo-auth-session/providers/google');
+}
 
 WebBrowser.maybeCompleteAuthSession();
 
 const GOOGLE_IOS_CLIENT_ID = '376759411009-rjlvdu7jgpr1r5ehbnggepllpe1rt560.apps.googleusercontent.com';
 
+// Dummy hook for web where Google auth isn't available
+function useNoOpGoogleAuth(): [any, any, () => Promise<any>] {
+  return [null, null, async () => {}];
+}
+
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const [, googleResponse, googlePromptAsync] = Google.useIdTokenAuthRequest({
-    iosClientId: GOOGLE_IOS_CLIENT_ID,
-  });
+  // Use real Google auth on native, no-op on web
+  const useGoogleAuth = GoogleAuth
+    ? () => GoogleAuth!.useIdTokenAuthRequest({ iosClientId: GOOGLE_IOS_CLIENT_ID })
+    : useNoOpGoogleAuth;
+  const [, googleResponse, googlePromptAsync] = useGoogleAuth();
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {

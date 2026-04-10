@@ -72,6 +72,15 @@ export function OnboardingWizard({ initialStep = 0, onComplete }: OnboardingWiza
   const handleBack = () => { if (currentStep > 0) setCurrentStep((prev) => prev - 1); };
 
   const handleSkip = () => {
+    if (Platform.OS === 'web') {
+      if (window.confirm('Skip Onboarding? You can complete your profile later from Settings.')) {
+        setSaving(true);
+        apiFetch('/users/me', { method: 'PUT', body: JSON.stringify({ onboardingStep: 5 }) })
+          .catch(() => {})
+          .finally(() => { setSaving(false); onComplete(); });
+      }
+      return;
+    }
     Alert.alert('Skip Onboarding?', 'You can complete your profile later from Settings.', [
       { text: 'Cancel', style: 'cancel' },
       { text: 'Skip', onPress: async () => {
@@ -185,7 +194,7 @@ const styles = StyleSheet.create({
   stepName: { fontFamily: 'Manrope', fontSize: 10, fontWeight: '500', color: '#bec9c1', textTransform: 'uppercase', letterSpacing: 1 },
   progressTrack: { height: 2, backgroundColor: '#1c211c', borderRadius: 1, overflow: 'hidden' },
   progressFill: { height: 2, overflow: 'hidden', borderRadius: 1 },
-  bottomAction: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 24, paddingTop: 20 },
+  bottomAction: { position: 'absolute' as const, bottom: 0, left: 0, right: 0, paddingHorizontal: 16, paddingBottom: 24, paddingTop: 20, backgroundColor: '#101511', zIndex: 10 },
   ctaWrap: { borderRadius: 12, overflow: 'hidden', shadowColor: '#006747', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 12 },
   ctaGradient: { paddingVertical: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8, backgroundColor: '#006747' },
   ctaText: { fontFamily: 'Manrope', fontSize: 13, fontWeight: '700', color: '#003825', textTransform: 'uppercase', letterSpacing: 2 },

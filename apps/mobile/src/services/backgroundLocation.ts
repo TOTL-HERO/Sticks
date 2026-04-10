@@ -1,6 +1,14 @@
-import * as TaskManager from 'expo-task-manager';
-import * as Location from 'expo-location';
+import { Platform } from 'react-native';
 import { useRoundStore } from '../stores/roundStore';
+
+// Only import native modules on non-web platforms
+let TaskManager: typeof import('expo-task-manager') | null = null;
+let Location: typeof import('expo-location') | null = null;
+
+if (Platform.OS !== 'web') {
+  TaskManager = require('expo-task-manager');
+  Location = require('expo-location');
+}
 
 const BACKGROUND_LOCATION_TASK = 'sticks-background-location';
 
@@ -151,33 +159,36 @@ function handleLocationUpdate(sample: LocationSample): void {
   locationBuffer.length = 0;
 }
 
-// --- Background task definition ---
+// --- Background task definition (native only) ---
 
-TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }) => {
-  if (error) {
-    console.error('[BackgroundLocation] Error:', error.message);
-    return;
-  }
-  if (data) {
-    const { locations } = data as { locations: Location.LocationObject[] };
-    if (locations?.length) {
-      for (const loc of locations) {
-        handleLocationUpdate({
-          lat: loc.coords.latitude,
-          lng: loc.coords.longitude,
-          timestamp: loc.timestamp,
-          accuracy: loc.coords.accuracy ?? 0,
-          altitude: loc.coords.altitude,
-        });
-      }
-      if (__DEV__) {
-        console.log('[BackgroundLocation] Processed', locations.length, 'location(s)');
+if (Platform.OS !== 'web' && TaskManager) {
+  TaskManager.defineTask(BACKGROUND_LOCATION_TASK, async ({ data, error }: any) => {
+    if (error) {
+      console.error('[BackgroundLocation] Error:', error.message);
+      return;
+    }
+    if (data) {
+      const { locations } = data as { locations: any[] };
+      if (locations?.length) {
+        for (const loc of locations) {
+          handleLocationUpdate({
+            lat: loc.coords.latitude,
+            lng: loc.coords.longitude,
+            timestamp: loc.timestamp,
+            accuracy: loc.coords.accuracy ?? 0,
+            altitude: loc.coords.altitude,
+          });
+        }
+        if (__DEV__) {
+          console.log('[BackgroundLocation] Processed', locations.length, 'location(s)');
+        }
       }
     }
-  }
-});
+  });
+}
 
 export async function registerBackgroundLocationTask(): Promise<void> {
+  if (!Location || !TaskManager) return;
   const { status } = await Location.requestBackgroundPermissionsAsync();
   if (status !== 'granted') {
     console.warn('[BackgroundLocation] Background permission not granted');
@@ -200,6 +211,7 @@ export async function registerBackgroundLocationTask(): Promise<void> {
 }
 
 export async function stopBackgroundLocationTask(): Promise<void> {
+  if (!Location || !TaskManager) return;
   const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
   if (isRegistered) {
     await Location.stopLocationUpdatesAsync(BACKGROUND_LOCATION_TASK);
@@ -208,6 +220,7 @@ export async function stopBackgroundLocationTask(): Promise<void> {
 
 /** Check if the background task is still alive and restart if needed */
 export async function checkAndRecoverTask(): Promise<{ recovered: boolean; gapMs: number | null }> {
+  if (!TaskManager) return { recovered: false, gapMs: null };
   const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_LOCATION_TASK);
   if (isRegistered) return { recovered: false, gapMs: null };
 
