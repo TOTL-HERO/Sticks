@@ -7,6 +7,26 @@ type Env = { Variables: { userId: string; orgRole?: string; internalUserId?: str
 
 const organizations = new Hono<Env>();
 
+// GET /organizations/:id/my-role — get current user's role in an org
+organizations.get("/:id/my-role", async (c) => {
+  const orgId = c.req.param("id");
+  const authId = c.get("userId") as string;
+
+  const user = await prisma.user.findUnique({ where: { authId } });
+  if (!user) {
+    return c.json({ role: null, organizationId: orgId });
+  }
+
+  const membership = await prisma.orgMembership.findUnique({
+    where: { organizationId_userId: { organizationId: orgId!, userId: user.id } },
+  });
+
+  return c.json({
+    role: membership?.role ?? null,
+    organizationId: orgId,
+  });
+});
+
 // POST /organizations/:id/members — invite user with role
 organizations.post("/:id/members", orgRoleMiddleware(["COMMISSIONER"]), async (c) => {
   const orgId = c.req.param("id");

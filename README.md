@@ -175,10 +175,8 @@ apps/
 
 ## Milestone Roadmap
 - **M1** ✅ Foundation + Scoring Overhaul
-- **M2** GPS map integration, offline sync hardening, GHIN API
-- **M3** Tournament Engine
-- **M4** White Label + Orgs
-- **M5** Social Feed + Crews
-- **M6** Tee Times (foreUP booking)
-- **M7** Bets + Game Formats
-- **M8** Memberships + Polish
+- **M2** ✅ GPS Map Integration, Offline Sync Hardening, Tee Time Booking
+- **M3** ✅ Tournament Engine + White Label Orgs
+- **M4** Social Feed + Crews
+- **M5** Bets + Game Formats
+- **M6** Memberships + Polish

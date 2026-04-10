@@ -3,6 +3,7 @@ import { prisma } from "../lib/prisma.ts";
 import { supabaseAdmin } from "../lib/supabase.ts";
 
 type Env = { Variables: { userId: string } };
+type OrgRoleRow = { role: string; organizationId: string; organization: { id: string; name: string; logoUrl: string | null } };
 
 const users = new Hono<Env>();
 
@@ -93,6 +94,30 @@ users.post("/me/avatar", async (c) => {
   });
 
   return c.json(user);
+});
+
+// GET /users/me/org-roles — list all org memberships for the current user
+users.get("/me/org-roles", async (c) => {
+  const authId = c.get("userId") as string;
+
+  const user = await prisma.user.findUnique({ where: { authId } });
+  if (!user) {
+    return c.json({ roles: [] });
+  }
+
+  const memberships: OrgRoleRow[] = await prisma.orgMembership.findMany({
+    where: { userId: user.id },
+    select: {
+      role: true,
+      organizationId: true,
+      organization: { select: { id: true, name: true, logoUrl: true } },
+    },
+  }) as unknown as OrgRoleRow[];
+
+  // Flat list of role strings for the commissioner check in BottomTabNavigator
+  const roles = memberships.map((m) => m.role);
+
+  return c.json({ roles, memberships });
 });
 
 export default users;
