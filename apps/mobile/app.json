@@ -15,6 +15,9 @@
     "ios": {
       "bundleIdentifier": "com.sticks.golf",
       "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyB1Ez8b5jBOTcUSXzEvpD3N9UUFIohCR4Y"
+      },
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "Sticks uses your GPS location as a golf rangefinder to calculate distance to the pin, front, center, and back of the green during your round.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "Sticks uses background GPS to keep calculating distances and tracking your shot trail even with the screen locked during a round.",
@@ -24,6 +27,11 @@
     },
     "android": {
       "package": "com.sticks.golf",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyB1Ez8b5jBOTcUSXzEvpD3N9UUFIohCR4Y"
+        }
+      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#101511"
