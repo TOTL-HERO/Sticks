@@ -46,7 +46,10 @@ export function CommissionerHomeScreen() {
 
   const { data, isLoading, error } = useQuery<Tournament[]>({
     queryKey: ['commissioner-tournaments'],
-    queryFn: () => apiFetch<Tournament[]>('/tournaments?role=commissioner'),
+    queryFn: async () => {
+      const res = await apiFetch<{ tournaments: Tournament[] }>('/tournaments');
+      return res.tournaments ?? [];
+    },
   });
 
   const sections = React.useMemo(() => {
