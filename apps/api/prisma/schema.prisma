@@ -139,6 +139,19 @@ enum RefundStatus {
   FAILED
 }
 
+enum SettlementStatus {
+  UNSETTLED
+  SETTLED
+  NA
+}
+
+enum PaymentRequestStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+}
+
 // ─── Core Entities ───────────────────────────────────────────────────────────
 
 model User {
@@ -168,6 +181,7 @@ model User {
   orgMemberships     OrgMembership[]
   scoreEdits         ScoreAuditLog[]  @relation("scoreEdits")
   disputeResolutions ScoreDispute[]   @relation("disputeResolutions")
+  paymentRequests    PaymentRequest[]
 }
 
 model Follow {
@@ -412,11 +426,14 @@ model TeeTime {
   refundStatus       RefundStatus     @default(NONE)
   cancelledAt        DateTime?
   confirmationNumber String?
+  settlementStatus   SettlementStatus @default(NA)
+  paymentIntentId    String?
   createdAt          DateTime         @default(now())
   updatedAt          DateTime         @updatedAt
 
   booker    User?      @relation(fields: [bookerId], references: [id])
   reminders Reminder[]
+  paymentRequests PaymentRequest[]
 }
 
 model Reminder {
@@ -567,4 +584,25 @@ model ScoreDispute {
 
   @@index([tournamentId])
   @@index([entryId])
+}
+
+// ─── Tee Time Booking V2 ─────────────────────────────────────────────────────
+
+model PaymentRequest {
+  id              String               @id @default(uuid())
+  teeTimeId       String
+  userId          String
+  amount          Float
+  status          PaymentRequestStatus @default(PENDING)
+  paymentIntentId String?
+  dueAt           DateTime
+  paidAt          DateTime?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  teeTime TeeTime @relation(fields: [teeTimeId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@index([teeTimeId])
+  @@index([userId])
 }

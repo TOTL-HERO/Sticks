@@ -10,7 +10,10 @@ import {
   type TeeTimeSearchParams,
   type TeeTimeResult,
   type BookingConfirmation,
+  type SplitDetails,
 } from "./bookingProvider.ts";
+import { paymentService } from "./paymentService.ts";
+import { notificationService } from "./notificationService.ts";
 
 export class BookingService {
   private foreUp: BookingProvider;
@@ -24,6 +27,7 @@ export class BookingService {
 
   /**
    * Search tee times — query foreUP first, fall back to GolfNow if empty.
+   * Supports timeOfDay filter (morning | afternoon | twilight).
    */
   async search(params: TeeTimeSearchParams): Promise<TeeTimeResult[]> {
     const foreUpResults = await this.foreUp.search(params);
@@ -35,25 +39,31 @@ export class BookingService {
 
   /**
    * Book a tee time — route to correct provider, create TeeTime record,
-   * compute commission.
+   * process payment, create split requests for multi-player groups,
+   * send notifications.
    */
   async book(
     providerRefId: string,
     provider: 'FOREUP' | 'GOLFNOW',
     userId: string,
     players: number,
-  ): Promise<BookingConfirmation> {
+    paymentMethodId = 'mock_pm',
+  ): Promise<BookingConfirmation & { splitDetails?: SplitDetails }> {
     const bp = provider === 'FOREUP' ? this.foreUp : this.golfNow;
-    const confirmation = await bp.book(providerRefId, userId, players);
+    const confirmation = await bp.book(providerRefId, userId, players, paymentMethodId);
+
+    // Process payment
+    const intent = await paymentService.createPaymentIntent(confirmation.totalPrice);
+    await paymentService.confirmPayment(intent.intentId);
 
     const commissionAmount = confirmation.totalPrice * this.commissionRate;
 
     // Create TeeTime record in DB with BOOKED status
-    await prisma.teeTime.create({
+    const teeTime = await prisma.teeTime.create({
       data: {
         courseName: confirmation.courseName,
         datetime: new Date(confirmation.datetime),
-        availableSpots: 0, // booked — no spots left for this reservation
+        availableSpots: 0,
         price: confirmation.totalPrice / players,
         bookingStatus: 'BOOKED',
         provider,
@@ -66,7 +76,54 @@ export class BookingService {
       },
     });
 
-    return confirmation;
+    // Send booking confirmation to organizer
+    await notificationService.sendBookingConfirmation(
+      userId,
+      confirmation.courseName,
+      confirmation.datetime,
+      confirmation.totalPrice,
+    );
+
+    // Schedule tee time reminder
+    await notificationService.scheduleReminder(
+      userId,
+      teeTime.id,
+      confirmation.courseName,
+      confirmation.datetime,
+    );
+
+    // Handle split payment for multi-player groups
+    let splitDetails: SplitDetails | undefined;
+    if (players > 1) {
+      splitDetails = await paymentService.createSplitRequests(
+        teeTime.id,
+        userId,
+        players,
+        confirmation.totalPrice,
+      );
+
+      // Send payment request notifications to group members
+      for (const req of splitDetails.paymentRequests) {
+        await notificationService.sendPaymentRequest(
+          req.userId,
+          teeTime.id,
+          req.id,
+          req.amount,
+        );
+      }
+    }
+
+    return { ...confirmation, splitDetails };
+  }
+
+  /**
+   * Process a group member's split payment.
+   */
+  async splitPay(
+    paymentRequestId: string,
+    paymentMethodId = 'mock_pm',
+  ): Promise<{ success: boolean }> {
+    return paymentService.processGroupMemberPayment(paymentRequestId);
   }
 
   /**

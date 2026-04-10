@@ -4,7 +4,6 @@
 import { Hono } from "hono";
 import { prisma } from "../lib/prisma.ts";
 import { bookingService } from "../services/bookingService.ts";
-import { reminderService } from "../services/reminderService.ts";
 
 type Env = { Variables: { userId: string } };
 
@@ -17,6 +16,7 @@ bookings.get("/search", async (c) => {
   const courseId = c.req.query("courseId");
   const timeFrom = c.req.query("timeFrom");
   const timeTo = c.req.query("timeTo");
+  const timeOfDay = c.req.query("timeOfDay") as 'morning' | 'afternoon' | 'twilight' | undefined;
   const lat = c.req.query("lat") ? parseFloat(c.req.query("lat")!) : undefined;
   const lng = c.req.query("lng") ? parseFloat(c.req.query("lng")!) : undefined;
 
@@ -28,11 +28,16 @@ bookings.get("/search", async (c) => {
     return c.json({ error: "players must be between 1 and 4", statusCode: 400 }, 400);
   }
 
+  if (timeOfDay && !['morning', 'afternoon', 'twilight'].includes(timeOfDay)) {
+    return c.json({ error: "timeOfDay must be morning, afternoon, or twilight", statusCode: 400 }, 400);
+  }
+
   const results = await bookingService.search({
     date,
     courseId: courseId || undefined,
     timeFrom: timeFrom || undefined,
     timeTo: timeTo || undefined,
+    timeOfDay: timeOfDay || undefined,
     players,
     lat,
     lng,
@@ -65,20 +70,7 @@ bookings.post("/", async (c) => {
   }
 
   try {
-    const confirmation = await bookingService.book(providerRefId, provider, user.id, players);
-
-    // Schedule push notification reminders
-    const teeTime = await prisma.teeTime.findFirst({
-      where: { providerRefId, bookerId: user.id },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (teeTime) {
-      // Fire-and-forget — don't block the booking response on reminder scheduling
-      reminderService
-        .scheduleReminders(teeTime.id, user.id, teeTime.datetime, teeTime.courseName, players)
-        .catch((err) => console.error('Failed to schedule reminders:', err));
-    }
+    const confirmation = await bookingService.book(providerRefId, provider, user.id, players, body.paymentMethodId || 'mock_pm');
 
     return c.json(confirmation, 201);
   } catch (err) {
@@ -114,7 +106,7 @@ bookings.get("/:id", async (c) => {
 
   const teeTime = await prisma.teeTime.findUnique({
     where: { id },
-    include: { reminders: true },
+    include: { reminders: true, paymentRequests: true },
   });
 
   if (!teeTime) {
@@ -122,6 +114,63 @@ bookings.get("/:id", async (c) => {
   }
 
   return c.json(teeTime);
+});
+
+// POST /bookings/:id/split-pay — group member pays their split portion
+bookings.post("/:id/split-pay", async (c) => {
+  const id = c.req.param("id");
+  const body = await c.req.json();
+  const { paymentRequestId, paymentMethodId } = body;
+
+  if (!paymentRequestId) {
+    return c.json({ error: "Missing required field: paymentRequestId", statusCode: 400 }, 400);
+  }
+
+  const teeTime = await prisma.teeTime.findUnique({ where: { id } });
+  if (!teeTime) {
+    return c.json({ error: "Booking not found", statusCode: 404 }, 404);
+  }
+
+  try {
+    const result = await bookingService.splitPay(paymentRequestId, paymentMethodId || 'mock_pm');
+    return c.json(result);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Payment failed";
+    if (message === 'Payment request not found') {
+      return c.json({ error: message, statusCode: 404 }, 404);
+    }
+    return c.json({ error: message, statusCode: 500 }, 500);
+  }
+});
+
+// GET /bookings/:id/split-status — get settlement status for a booking
+bookings.get("/:id/split-status", async (c) => {
+  const id = c.req.param("id");
+
+  const teeTime = await prisma.teeTime.findUnique({
+    where: { id },
+    include: { paymentRequests: true },
+  });
+
+  if (!teeTime) {
+    return c.json({ error: "Booking not found", statusCode: 404 }, 404);
+  }
+
+  const pendingCount = teeTime.paymentRequests.filter(
+    (r) => r.status === 'PENDING' || r.status === 'PROCESSING',
+  ).length;
+
+  const overdueRequests = teeTime.paymentRequests.filter(
+    (r) => r.status === 'PENDING' && new Date(r.dueAt) < new Date(),
+  );
+
+  return c.json({
+    settlementStatus: teeTime.settlementStatus,
+    settled: teeTime.settlementStatus === 'SETTLED',
+    pendingCount,
+    overdueCount: overdueRequests.length,
+    paymentRequests: teeTime.paymentRequests,
+  });
 });
 
 // POST /bookings/:id/cancel — cancel a booking

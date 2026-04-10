@@ -1,0 +1,11 @@
+Hey Cody, I don’t have the foreUP API access yet but I want to keep moving on tee time booking. Here’s what I want you to build in the meantime.
+Build the full tee time booking flow using mocked data. 
+I want every screen done as if the API is live. 
+The search screen should have a date picker, a player count selector (1–4), and a time of day filter (morning, afternoon, twilight). 
+Results come back as a list of available tee times showing the course name, time, number of spots, and price. 
+Each result should be tappable and open a course detail screen with the course name, a brief description placeholder, the selected time, price breakdown, and a Book Now button.
+When they tap Book Now take them to a confirmation screen that shows the full booking summary. This is where payments come in. The player who books pays the full amount upfront through Stripe. If there are multiple players in the group, the app should automatically split the total evenly and send each player a payment request through the app. Each player gets a push notification that someone booked a tee time and their split is owed. They tap it, land on a simple payment screen, and pay their portion through Stripe. Once all players have paid, the booking is marked as settled. If someone hasn’t paid within 24 hours flag it in the UI for the organizer.
+After the organizer confirms and pays their portion, show a success state and trigger a OneSignal reminder notification for the tee time. Just mock the notification timing for now.
+For the course data, hardcode 3 or 4 Utah courses with a handful of fake tee times each. Bonneville Golf Course, Soldier Hollow, East Bay, something like that. Enough that the flow feels real when I’m demoing it.
+On the code side, build the API service layer as if foreUP is connected. Create the actual functions for searching tee times and creating a booking but have them return mocked data instead of real network calls. When I get API access the only thing that changes is swapping those mock responses for real foreUP calls. Nothing in the UI should need to touch.
+Keep everything consistent with the existing brand — dark background, Augusta green, brass accents, Playfair Display on headings.

@@ -2,11 +2,14 @@
 // Provider-pattern abstraction for tee time booking across foreUP and GolfNow.
 // TODO: Replace mock implementations with real API calls when credentials are available.
 
+export type TimeOfDay = 'morning' | 'afternoon' | 'twilight';
+
 export interface TeeTimeSearchParams {
   date: string;           // YYYY-MM-DD
   courseId?: string;
   timeFrom?: string;      // HH:mm
   timeTo?: string;        // HH:mm
+  timeOfDay?: TimeOfDay;  // morning | afternoon | twilight
   players: number;
   lat?: number;
   lng?: number;
@@ -17,6 +20,7 @@ export interface TeeTimeResult {
   provider: 'FOREUP' | 'GOLFNOW';
   courseName: string;
   courseId: string;
+  courseDescription: string;
   datetime: string;       // ISO 8601
   availableSpots: number;
   pricePerPlayer: number;
@@ -31,63 +35,147 @@ export interface BookingConfirmation {
   datetime: string;
   players: number;
   totalPrice: number;
+  splitDetails?: SplitDetails;
+}
+
+export interface SplitDetails {
+  totalAmount: number;
+  playerCount: number;
+  perPlayerAmount: number;
+  paymentRequests: { id: string; userId: string; amount: number; status: string; dueAt: string }[];
 }
 
 export interface BookingProvider {
   search(params: TeeTimeSearchParams): Promise<TeeTimeResult[]>;
-  book(providerRefId: string, userId: string, players: number): Promise<BookingConfirmation>;
+  book(providerRefId: string, userId: string, players: number, paymentMethodId?: string): Promise<BookingConfirmation>;
   cancel(providerRefId: string): Promise<{ success: boolean; refundEligible: boolean }>;
   refund(providerRefId: string): Promise<{ success: boolean; refundAmount: number }>;
 }
 
+// ─── Time-of-day filter helper ────────────────────────────────────────────────
+
+export function resolveTimeRange(timeOfDay?: TimeOfDay): { timeFrom?: string; timeTo?: string } {
+  if (!timeOfDay) return {};
+  if (timeOfDay === 'morning')   return { timeFrom: '00:00', timeTo: '11:59' };
+  if (timeOfDay === 'afternoon') return { timeFrom: '12:00', timeTo: '15:59' };
+  if (timeOfDay === 'twilight')  return { timeFrom: '16:00', timeTo: '23:59' };
+  return {};
+}
+
+// ─── Static Utah mock course data ────────────────────────────────────────────
+
+interface MockCourse {
+  id: string;
+  name: string;
+  description: string;
+  location: string;
+  priceByTimeOfDay: { morning: number; afternoon: number; twilight: number };
+  teeTimes: { time: string; availableSpots: number }[];
+}
+
+const UTAH_COURSES: MockCourse[] = [
+  {
+    id: 'bonneville-001',
+    name: 'Bonneville Golf Course',
+    description: 'A classic Salt Lake City municipal course with views of the Wasatch Front. 18 holes of tree-lined fairways and well-maintained greens.',
+    location: 'Salt Lake City, UT',
+    priceByTimeOfDay: { morning: 45, afternoon: 38, twilight: 28 },
+    teeTimes: [
+      { time: '07:00', availableSpots: 4 },
+      { time: '08:30', availableSpots: 2 },
+      { time: '10:00', availableSpots: 3 },
+      { time: '13:00', availableSpots: 4 },
+      { time: '15:30', availableSpots: 2 },
+      { time: '17:00', availableSpots: 4 },
+    ],
+  },
+  {
+    id: 'soldier-hollow-002',
+    name: 'Soldier Hollow Golf Course',
+    description: 'Olympic venue turned public course in the Heber Valley with stunning mountain panoramas. Two 18-hole courses at 5,600 feet elevation.',
+    location: 'Midway, UT',
+    priceByTimeOfDay: { morning: 55, afternoon: 48, twilight: 35 },
+    teeTimes: [
+      { time: '07:30', availableSpots: 4 },
+      { time: '09:00', availableSpots: 3 },
+      { time: '10:30', availableSpots: 2 },
+      { time: '12:00', availableSpots: 4 },
+      { time: '14:30', availableSpots: 3 },
+      { time: '17:30', availableSpots: 4 },
+    ],
+  },
+  {
+    id: 'east-bay-003',
+    name: 'East Bay Golf Course',
+    description: "Provo's premier public course along the shores of Utah Lake. Flat, walkable layout with wide fairways — great for all skill levels.",
+    location: 'Provo, UT',
+    priceByTimeOfDay: { morning: 40, afternoon: 35, twilight: 25 },
+    teeTimes: [
+      { time: '06:30', availableSpots: 4 },
+      { time: '08:00', availableSpots: 2 },
+      { time: '09:30', availableSpots: 4 },
+      { time: '12:30', availableSpots: 3 },
+      { time: '15:00', availableSpots: 4 },
+      { time: '17:00', availableSpots: 2 },
+    ],
+  },
+  {
+    id: 'stonebridge-004',
+    name: 'Stonebridge Golf Club',
+    description: "West Valley City's championship layout with challenging water features on 12 of 18 holes. Host of multiple Utah State Amateur qualifiers.",
+    location: 'West Valley City, UT',
+    priceByTimeOfDay: { morning: 50, afternoon: 42, twilight: 30 },
+    teeTimes: [
+      { time: '07:00', availableSpots: 3 },
+      { time: '08:30', availableSpots: 4 },
+      { time: '10:00', availableSpots: 2 },
+      { time: '13:30', availableSpots: 4 },
+      { time: '15:00', availableSpots: 3 },
+      { time: '18:00', availableSpots: 4 },
+    ],
+  },
+];
+
+function getPriceForTime(course: MockCourse, time: string): number {
+  const hour = parseInt(time.split(':')[0]!, 10);
+  if (hour < 12) return course.priceByTimeOfDay.morning;
+  if (hour < 16) return course.priceByTimeOfDay.afternoon;
+  return course.priceByTimeOfDay.twilight;
+}
+
 // ─── ForeUP Provider ─────────────────────────────────────────────────────────
-// TODO: Replace mock data with real foreUP API calls using FOREUP_API_KEY env var.
-// foreUP is the primary provider — dominant in Utah market.
 
 export class ForeUpProvider implements BookingProvider {
-  private apiKey: string;
-
-  constructor() {
-    this.apiKey = process.env.FOREUP_API_KEY || '';
-  }
-
   async search(params: TeeTimeSearchParams): Promise<TeeTimeResult[]> {
-    // TODO: Replace with real foreUP API call:
-    // const res = await fetch(`https://foreupsoftware.com/api/booking/times?date=${params.date}&course_id=${params.courseId}`, {
-    //   headers: { Authorization: `Bearer ${this.apiKey}` },
-    // });
+    // TODO: Replace with real foreUP API call when FOREUP_API_KEY is available
 
-    // Mock realistic Utah course data
-    const utahCourses = [
-      { name: 'Thanksgiving Point Golf Club', id: 'foreup-tp-001', price: 55 },
-      { name: 'Soldier Hollow Golf Course', id: 'foreup-sh-002', price: 45 },
-      { name: 'Hobble Creek Golf Course', id: 'foreup-hc-003', price: 38 },
-      { name: 'Fox Hollow Golf Club', id: 'foreup-fh-004', price: 42 },
-      { name: 'Alpine Country Club', id: 'foreup-ac-005', price: 65 },
-    ];
+    // Resolve time range from timeOfDay filter
+    const timeRange = resolveTimeRange(params.timeOfDay);
+    const effectiveFrom = params.timeFrom ?? timeRange.timeFrom;
+    const effectiveTo = params.timeTo ?? timeRange.timeTo;
 
-    const times = ['07:00', '07:30', '08:00', '08:30', '09:00', '09:30', '10:00'];
     const results: TeeTimeResult[] = [];
 
-    for (const course of utahCourses) {
+    for (const course of UTAH_COURSES) {
       if (params.courseId && course.id !== params.courseId) continue;
 
-      for (const time of times) {
-        if (params.timeFrom && time < params.timeFrom) continue;
-        if (params.timeTo && time > params.timeTo) continue;
+      for (const slot of course.teeTimes) {
+        if (effectiveFrom && slot.time < effectiveFrom) continue;
+        if (effectiveTo && slot.time > effectiveTo) continue;
+        if (slot.availableSpots < params.players) continue;
 
-        const spots = Math.floor(Math.random() * 4) + 1;
-        if (spots < params.players) continue;
+        const price = getPriceForTime(course, slot.time);
 
         results.push({
-          providerRefId: `foreup-${course.id}-${params.date}-${time}`,
+          providerRefId: `foreup-${course.id}-${params.date}-${slot.time.replace(':', '')}`,
           provider: 'FOREUP',
           courseName: course.name,
           courseId: course.id,
-          datetime: `${params.date}T${time}:00`,
-          availableSpots: spots,
-          pricePerPlayer: course.price,
-          totalPrice: course.price * params.players,
+          courseDescription: course.description,
+          datetime: `${params.date}T${slot.time}:00`,
+          availableSpots: slot.availableSpots,
+          pricePerPlayer: price,
+          totalPrice: price * params.players,
         });
       }
     }
@@ -95,116 +183,67 @@ export class ForeUpProvider implements BookingProvider {
     return results;
   }
 
-  async book(providerRefId: string, userId: string, players: number): Promise<BookingConfirmation> {
+  async book(providerRefId: string, userId: string, players: number, paymentMethodId?: string): Promise<BookingConfirmation> {
     // TODO: Replace with real foreUP API reservation call
-    // const res = await fetch('https://foreupsoftware.com/api/booking/reserve', {
-    //   method: 'POST',
-    //   headers: { Authorization: `Bearer ${this.apiKey}`, 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({ tee_time_id: providerRefId, players }),
-    // });
-
     const confirmationNumber = `FU-${Date.now().toString(36).toUpperCase()}`;
-    const parts = providerRefId.split('-');
-    const datetime = parts.slice(-2).join('T') + ':00';
+
+    // Resolve course from providerRefId
+    const courseId = providerRefId.split('-').slice(1, 3).join('-');
+    const course = UTAH_COURSES.find((c) => providerRefId.includes(c.id)) ?? UTAH_COURSES[0]!;
+    const timeStr = providerRefId.split('-').pop() ?? '0700';
+    const time = `${timeStr.slice(0, 2)}:${timeStr.slice(2)}`;
+    const price = getPriceForTime(course, time);
 
     return {
       providerRefId,
       confirmationNumber,
       provider: 'FOREUP',
-      courseName: 'Thanksgiving Point Golf Club', // TODO: resolve from providerRefId
-      datetime,
+      courseName: course.name,
+      datetime: new Date().toISOString(),
       players,
-      totalPrice: 55 * players, // TODO: resolve real price from foreUP
+      totalPrice: price * players,
     };
   }
 
   async cancel(providerRefId: string): Promise<{ success: boolean; refundEligible: boolean }> {
-    // TODO: Replace with real foreUP API cancellation call
     return { success: true, refundEligible: true };
   }
 
   async refund(providerRefId: string): Promise<{ success: boolean; refundAmount: number }> {
-    // TODO: Replace with real foreUP API refund call
-    return { success: true, refundAmount: 55 }; // TODO: resolve real amount
+    return { success: true, refundAmount: 45 };
   }
 }
 
 // ─── GolfNow Provider ────────────────────────────────────────────────────────
-// TODO: Replace mock data with real GolfNow API calls using GOLFNOW_API_KEY env var.
-// GolfNow is the national fallback when foreUP returns no results.
 
 export class GolfNowProvider implements BookingProvider {
-  private apiKey: string;
-
-  constructor() {
-    this.apiKey = process.env.GOLFNOW_API_KEY || '';
-  }
-
   async search(params: TeeTimeSearchParams): Promise<TeeTimeResult[]> {
-    // TODO: Replace with real GolfNow API call:
-    // const res = await fetch(`https://api.golfnow.com/teetimes?date=${params.date}&players=${params.players}`, {
-    //   headers: { 'X-Api-Key': this.apiKey },
-    // });
-
-    // Mock realistic Utah + national course data
-    const courses = [
-      { name: 'The Ledges Golf Club', id: 'golfnow-lg-001', price: 75 },
-      { name: 'Entrada at Snow Canyon', id: 'golfnow-ec-002', price: 89 },
-      { name: 'Sand Hollow Resort', id: 'golfnow-sh-003', price: 69 },
-      { name: 'Coral Canyon Golf Course', id: 'golfnow-cc-004', price: 59 },
-    ];
-
-    const times = ['07:15', '08:15', '09:15', '10:15', '11:00'];
-    const results: TeeTimeResult[] = [];
-
-    for (const course of courses) {
-      if (params.courseId && course.id !== params.courseId) continue;
-
-      for (const time of times) {
-        if (params.timeFrom && time < params.timeFrom) continue;
-        if (params.timeTo && time > params.timeTo) continue;
-
-        const spots = Math.floor(Math.random() * 4) + 1;
-        if (spots < params.players) continue;
-
-        results.push({
-          providerRefId: `golfnow-${course.id}-${params.date}-${time}`,
-          provider: 'GOLFNOW',
-          courseName: course.name,
-          courseId: course.id,
-          datetime: `${params.date}T${time}:00`,
-          availableSpots: spots,
-          pricePerPlayer: course.price,
-          totalPrice: course.price * params.players,
-        });
-      }
-    }
-
-    return results;
+    // TODO: Replace with real GolfNow API call when GOLFNOW_API_KEY is available
+    // GolfNow is the national fallback — returns empty for Utah-specific searches
+    return [];
   }
 
-  async book(providerRefId: string, userId: string, players: number): Promise<BookingConfirmation> {
-    // TODO: Replace with real GolfNow API reservation call
+  async book(providerRefId: string, userId: string, players: number, paymentMethodId?: string): Promise<BookingConfirmation> {
     const confirmationNumber = `GN-${Date.now().toString(36).toUpperCase()}`;
-
     return {
       providerRefId,
       confirmationNumber,
       provider: 'GOLFNOW',
-      courseName: 'The Ledges Golf Club', // TODO: resolve from providerRefId
+      courseName: 'Golf Course',
       datetime: new Date().toISOString(),
       players,
-      totalPrice: 75 * players, // TODO: resolve real price from GolfNow
+      totalPrice: 65 * players,
     };
   }
 
   async cancel(providerRefId: string): Promise<{ success: boolean; refundEligible: boolean }> {
-    // TODO: Replace with real GolfNow API cancellation call
     return { success: true, refundEligible: true };
   }
 
   async refund(providerRefId: string): Promise<{ success: boolean; refundAmount: number }> {
-    // TODO: Replace with real GolfNow API refund call
-    return { success: true, refundAmount: 75 }; // TODO: resolve real amount
+    return { success: true, refundAmount: 65 };
   }
 }
+
+// Export the static course data for testing
+export { UTAH_COURSES };

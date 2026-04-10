@@ -6,6 +6,10 @@ import { HomeScreen } from '../screens/HomeScreen';
 import { PlayScreen } from '../screens/PlayScreen';
 import { ScoringScreen } from '../screens/scoring/ScoringScreen';
 import { TeeTimeScreen } from '../screens/TeeTimeScreen';
+import { CourseDetailScreen } from '../screens/tee-times/CourseDetailScreen';
+import { ConfirmationScreen } from '../screens/tee-times/ConfirmationScreen';
+import { SuccessScreen } from '../screens/tee-times/SuccessScreen';
+import { SplitPaymentScreen } from '../screens/tee-times/SplitPaymentScreen';
 import { LeaderboardScreen } from '../screens/LeaderboardScreen';
 import { BetsScreen } from '../screens/BetsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
@@ -31,6 +35,10 @@ function PlayStackNavigator() {
         options={{ gestureEnabled: false }}
       />
       <PlayStack.Screen name="TeeTimes" component={TeeTimeScreen} />
+      <PlayStack.Screen name="CourseDetail" component={CourseDetailScreen} />
+      <PlayStack.Screen name="Confirmation" component={ConfirmationScreen} />
+      <PlayStack.Screen name="Success" component={SuccessScreen} />
+      <PlayStack.Screen name="SplitPayment" component={SplitPaymentScreen} />
     </PlayStack.Navigator>
   );
 }
