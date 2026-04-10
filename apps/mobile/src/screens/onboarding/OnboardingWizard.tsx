@@ -57,7 +57,9 @@ export function OnboardingWizard({ initialStep = 0, onComplete }: OnboardingWiza
       if (step === 2) { if (data.homeCourseId) body.homeCourseId = data.homeCourseId; if (data.homeCourseName) body.homeCourseName = data.homeCourseName; }
       if (step === 3 && data.playStyle) body.playStyle = data.playStyle;
       await apiFetch('/users/me', { method: 'PUT', body: JSON.stringify(body) });
-    } catch { /* Silently fail */ }
+    } catch (err) {
+      console.warn('[Onboarding] persistStep failed:', err);
+    }
   };
 
   const handleNext = async () => {
@@ -103,7 +105,9 @@ export function OnboardingWizard({ initialStep = 0, onComplete }: OnboardingWiza
       if (data.homeCourseName) body.homeCourseName = data.homeCourseName;
       if (data.playStyle) body.playStyle = data.playStyle;
       await apiFetch('/users/me', { method: 'PUT', body: JSON.stringify(body) });
-    } catch { Alert.alert('Error', 'Failed to save profile. Please try again.'); setSaving(false); return; }
+    } catch (err) {
+      console.warn('[Onboarding] Failed to save profile, continuing anyway:', err);
+    }
     setSaving(false);
     onComplete();
   };

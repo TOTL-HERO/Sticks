@@ -1,4 +1,5 @@
 # Sticks API — Bun + Hono + Prisma
+# v2 — CORS support
 FROM oven/bun:1 AS base
 WORKDIR /app
 

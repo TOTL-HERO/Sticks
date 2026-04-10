@@ -1,5 +1,5 @@
 import React, { useCallback } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { FlatList, TouchableOpacity } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -7,8 +7,9 @@ import { useQuery } from '@tanstack/react-query';
 import { useNavigation } from '@react-navigation/native';
 import { Card } from '../components/Card';
 import { apiFetch } from '../lib/api';
+import { useAuth } from '../hooks/useAuth';
 
-interface UserProfile { id: string; firstName: string; lastName: string; avatarUrl: string | null; ghinIndex: number | null; homeCourseName: string | null; }
+interface UserProfile { id: string; firstName: string; lastName: string; avatarUrl: string | null; ghinIndex: number | null; homeCourseName: string | null; playStyle: string | null; }
 interface Hole { holeNumber: number; strokes: number; putts: number; penalties: number; gpsTimestamp: string | null; par: number | null; }
 interface Round { id: string; courseName: string; coursePar: number; totalScore: number | null; scoreRelToPar: number | null; isFinalized: boolean; startedAt: string; endedAt: string | null; holes: Hole[]; }
 interface RoundsResponse { rounds: Round[]; nextCursor: string | null; }
@@ -30,6 +31,7 @@ function StatCard({ label, value, icon }: { label: string; value: string; icon: 
 
 export function ProfileScreen() {
   const navigation = useNavigation<any>();
+  const { signOut } = useAuth();
 
   const { data: profile, isLoading: profileLoading } = useQuery<UserProfile>({
     queryKey: ['profile'], queryFn: () => apiFetch<UserProfile>('/users/me'),
@@ -86,7 +88,13 @@ export function ProfileScreen() {
         ListHeaderComponent={
           <>
             <View style={styles.hero}>
-              <View style={styles.avatarWrap}><MaterialCommunityIcons name="account" size={40} color="#bec9c1" /></View>
+              <View style={styles.avatarWrap}>
+                {profile?.avatarUrl ? (
+                  <Image source={{ uri: profile.avatarUrl }} style={{ width: 76, height: 76, borderRadius: 38 }} />
+                ) : (
+                  <MaterialCommunityIcons name="account" size={40} color="#bec9c1" />
+                )}
+              </View>
               <Text style={styles.displayName}>{displayName}</Text>
               {profile?.homeCourseName && (
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -97,6 +105,15 @@ export function ProfileScreen() {
               {profile?.ghinIndex !== null && profile?.ghinIndex !== undefined && (
                 <View style={styles.handicapBadge}><Text style={styles.handicapText}>Handicap: {profile.ghinIndex}</Text></View>
               )}
+              {profile?.playStyle && (
+                <Text style={styles.homeCourse}>{profile.playStyle.charAt(0) + profile.playStyle.slice(1).toLowerCase()} Player</Text>
+              )}
+              <TouchableOpacity onPress={signOut} activeOpacity={0.7} style={{ marginTop: 8 }}>
+                <View style={styles.signOutBtn}>
+                  <MaterialCommunityIcons name="logout" size={16} color="#ffb4ab" />
+                  <Text style={styles.signOutText}>Sign Out</Text>
+                </View>
+              </TouchableOpacity>
             </View>
             <View style={styles.statsRow}>
               <StatCard label="Fairways Hit" value={fairwayPct} icon="golf-tee" />
@@ -139,4 +156,6 @@ const styles = StyleSheet.create({
   emptyWrap: { alignItems: 'center', paddingVertical: 48, gap: 16 },
   emptyTitle: { color: '#bec9c1', fontFamily: 'Manrope', fontSize: 16, textAlign: 'center' },
   emptyDesc: { color: '#bec9c1', fontFamily: 'Manrope', fontSize: 13, textAlign: 'center', opacity: 0.6 },
+  signOutBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 16, paddingVertical: 8, backgroundColor: 'rgba(255,180,171,0.1)', borderRadius: 8 },
+  signOutText: { fontFamily: 'Manrope', fontSize: 13, fontWeight: '600', color: '#ffb4ab' },
 });

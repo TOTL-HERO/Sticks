@@ -479,7 +479,7 @@ export function TeeTimeScreen() {
           data={teeTimes}
           keyExtractor={(item) => item.providerRefId}
           renderItem={renderTeeTime}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 140 }}
         />
       )}
     </SafeAreaView>
