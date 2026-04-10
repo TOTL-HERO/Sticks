@@ -8,6 +8,10 @@ import leaderboardRoutes from "./routes/leaderboard.ts";
 import teeTimesRoutes from "./routes/tee-times.ts";
 import coursesRoutes from "./routes/courses.ts";
 import bookingsRoutes from "./routes/bookings.ts";
+import tournamentsRoutes from "./routes/tournaments.ts";
+import seasonsRoutes from "./routes/seasons.ts";
+import organizationsRoutes from "./routes/organizations.ts";
+import spectatorRoutes from "./routes/spectator.ts";
 
 // Initialize Sentry
 if (process.env.SENTRY_DSN) {
@@ -24,23 +28,32 @@ app.get("/health", (c) => {
   return c.json({ status: "ok" });
 });
 
-// Apply auth middleware to all routes after /health
+// ─── Public routes (no auth) ─────────────────────────────────────────────────
+// Spectator leaderboard is public — mount BEFORE auth middleware
+app.route("/leaderboard", spectatorRoutes);
+
+// Apply auth middleware to all routes after public ones
 app.use("*", async (c, next) => {
-  // Skip auth for health check
-  if (c.req.path === "/health") {
+  // Skip auth for health check and spectator leaderboard
+  if (c.req.path === "/health" || c.req.path.startsWith("/leaderboard/")) {
     return next();
   }
   return authMiddleware(c, next);
 });
 
-// Mount route modules
+// ─── Authenticated routes ────────────────────────────────────────────────────
 app.route("/users", usersRoutes);
 app.route("/rounds", roundsRoutes);
 app.route("/feed", feedRoutes);
-app.route("/leaderboard", leaderboardRoutes);
+app.route("/leaderboard-api", leaderboardRoutes);
 app.route("/tee-times", teeTimesRoutes);
 app.route("/courses", coursesRoutes);
 app.route("/bookings", bookingsRoutes);
+
+// M3 Tournament Engine routes
+app.route("/tournaments", tournamentsRoutes);
+app.route("/seasons", seasonsRoutes);
+app.route("/organizations", organizationsRoutes);
 
 // Global error handler
 app.onError((err, c) => {

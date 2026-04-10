@@ -1,6 +1,7 @@
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { useQuery } from '@tanstack/react-query';
 import { HomeScreen } from '../screens/HomeScreen';
 import { PlayScreen } from '../screens/PlayScreen';
 import { ScoringScreen } from '../screens/scoring/ScoringScreen';
@@ -9,11 +10,16 @@ import { LeaderboardScreen } from '../screens/LeaderboardScreen';
 import { BetsScreen } from '../screens/BetsScreen';
 import { ProfileScreen } from '../screens/ProfileScreen';
 import { RoundDetailScreen } from '../screens/RoundDetailScreen';
+import { TournamentDetailScreen } from '../screens/tournament/TournamentDetailScreen';
+import { TournamentLeaderboardScreen } from '../screens/tournament/TournamentLeaderboardScreen';
+import { CommissionerStack } from './CommissionerStack';
 import { useAppStore } from '../stores/appStore';
+import { apiFetch } from '../lib/api';
 
 const Tab = createBottomTabNavigator();
 const PlayStack = createNativeStackNavigator();
 const ProfileStack = createNativeStackNavigator();
+const LeaderboardStack = createNativeStackNavigator();
 
 function PlayStackNavigator() {
   return (
@@ -38,8 +44,37 @@ function ProfileStackNavigator() {
   );
 }
 
+function LeaderboardStackNavigator() {
+  return (
+    <LeaderboardStack.Navigator screenOptions={{ headerShown: false }}>
+      <LeaderboardStack.Screen name="LeaderboardHome" component={LeaderboardScreen} />
+      <LeaderboardStack.Screen name="TournamentDetail" component={TournamentDetailScreen} />
+      <LeaderboardStack.Screen name="TournamentLeaderboard" component={TournamentLeaderboardScreen} />
+    </LeaderboardStack.Navigator>
+  );
+}
+
+/** Check if user has COMMISSIONER or ADMIN role on any org */
+function useIsCommissioner(): boolean {
+  const { data } = useQuery<{ isCommissioner: boolean }>({
+    queryKey: ['user-commissioner-check'],
+    queryFn: async () => {
+      try {
+        const res = await apiFetch<{ roles: string[] }>('/users/me/org-roles');
+        const isComm = (res.roles ?? []).some((r) => r === 'COMMISSIONER' || r === 'ADMIN');
+        return { isCommissioner: isComm };
+      } catch {
+        return { isCommissioner: false };
+      }
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+  return data?.isCommissioner ?? false;
+}
+
 export function BottomTabNavigator() {
   const hideTabBar = useAppStore((s) => s.hideTabBar);
+  const showCommissioner = useIsCommissioner();
 
   return (
     <Tab.Navigator
@@ -88,7 +123,7 @@ export function BottomTabNavigator() {
       />
       <Tab.Screen
         name="Leaderboard"
-        component={LeaderboardScreen}
+        component={LeaderboardStackNavigator}
         options={{
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons name="podium" size={size} color={color} />
@@ -104,6 +139,17 @@ export function BottomTabNavigator() {
           ),
         }}
       />
+      {showCommissioner && (
+        <Tab.Screen
+          name="Commissioner"
+          component={CommissionerStack}
+          options={{
+            tabBarIcon: ({ color, size }) => (
+              <MaterialCommunityIcons name="shield-crown" size={size} color={color} />
+            ),
+          }}
+        />
+      )}
       <Tab.Screen
         name="Profile"
         component={ProfileStackNavigator}

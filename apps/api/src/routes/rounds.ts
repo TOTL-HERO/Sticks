@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { prisma } from "../lib/prisma.ts";
+import { supabaseAdmin } from "../lib/supabase.ts";
 
 type Env = { Variables: { userId: string } };
 
@@ -78,6 +79,64 @@ rounds.post("/", async (c) => {
   return c.json({ id: round.id }, 201);
 });
 
+// ─── Tournament Entry Update on Hole Submission ──────────────────────────────
+
+async function updateTournamentEntryFromHole(roundId: string) {
+  const round = await prisma.round.findUnique({
+    where: { id: roundId },
+    include: { holes: true, players: true },
+  });
+  if (!round?.tournamentId) return;
+
+  const totalScore = round.holes.reduce((sum, h) => sum + h.strokes, 0);
+  const scoreRelToPar = totalScore - round.coursePar;
+  const thru = round.holes.length;
+
+  // Update each player's tournament entry
+  for (const rp of round.players) {
+    const entry = await prisma.tournamentEntry.findUnique({
+      where: { tournamentId_userId: { tournamentId: round.tournamentId, userId: rp.userId } },
+    });
+    if (!entry) continue;
+
+    await prisma.tournamentEntry.update({
+      where: { id: entry.id },
+      data: { score: totalScore, scoreRelToPar, thru },
+    });
+  }
+
+  // Broadcast to Supabase Realtime if leaderboard not frozen
+  const tournament = await prisma.tournament.findUnique({ where: { id: round.tournamentId } });
+  if (tournament && !tournament.leaderboardFrozen) {
+    const entries = await prisma.tournamentEntry.findMany({
+      where: { tournamentId: round.tournamentId },
+      include: { user: { select: { firstName: true, lastName: true } } },
+      orderBy: { scoreRelToPar: "asc" },
+    });
+
+    try {
+      const channel = supabaseAdmin.channel(`tournament:${round.tournamentId}`);
+      await channel.send({
+        type: "broadcast",
+        event: "leaderboard_update",
+        payload: {
+          entries: entries.map((e, i) => ({
+            rank: i + 1,
+            entryId: e.id,
+            name: `${e.user.firstName} ${e.user.lastName}`,
+            scoreRelToPar: e.scoreRelToPar,
+            thru: e.thru,
+            flight: e.flight,
+          })),
+        },
+      });
+      supabaseAdmin.removeChannel(channel);
+    } catch {
+      // Non-critical: broadcast failure shouldn't block score submission
+    }
+  }
+}
+
 // PUT /rounds/:id/holes/:num — upsert Hole record
 // Accepts `x-force` header for conflict resolution — when present, overwrites
 // server data unconditionally (used by sync queue on 409 conflicts).
@@ -119,6 +178,7 @@ rounds.put("/:id/holes/:num", async (c) => {
       },
     });
 
+    await updateTournamentEntryFromHole(roundId);
     return c.json(hole);
   }
 
@@ -148,6 +208,7 @@ rounds.put("/:id/holes/:num", async (c) => {
     },
   });
 
+  await updateTournamentEntryFromHole(roundId);
   return c.json(hole);
 });
 

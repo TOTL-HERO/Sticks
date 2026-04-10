@@ -33,6 +33,7 @@ enum ScoringMode {
   STABLEFORD
   SCRAMBLE
   BEST_BALL
+  CHAPMAN
 }
 
 enum FeedEventType {
@@ -43,6 +44,45 @@ enum FeedEventType {
   CREW_ACTIVITY
   RIVALRY_MILESTONE
   BRACKET_ADVANCEMENT
+  TOURNAMENT_ANNOUNCEMENT
+  SCORE_DISPUTE_RESOLVED
+}
+
+enum HostingType {
+  STICKS_HOSTED
+  SELF_HOSTED
+}
+
+enum BracketType {
+  SINGLE_ELIMINATION
+  DOUBLE_ELIMINATION
+  ROUND_ROBIN
+}
+
+enum OrgRole {
+  COMMISSIONER
+  COACH
+  ADMIN
+  PLAYER
+}
+
+enum DisputeStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+enum MatchResult {
+  WIN
+  LOSS
+  HALVED
+  BYE
+}
+
+enum EliminationStatus {
+  ACTIVE
+  ELIMINATED
+  WITHDRAWN
 }
 
 enum BetStatus {
@@ -124,6 +164,10 @@ model User {
   following         Follow[]    @relation("follower")
   followers         Follow[]    @relation("following")
   bookings          TeeTime[]
+  // ── M3 additions ──
+  orgMemberships     OrgMembership[]
+  scoreEdits         ScoreAuditLog[]  @relation("scoreEdits")
+  disputeResolutions ScoreDispute[]   @relation("disputeResolutions")
 }
 
 model Follow {
@@ -151,6 +195,8 @@ model Organization {
   tournaments Tournament[]
   seasons     Season[]
   feedEvents  FeedEvent[]
+  // ── M3 additions ──
+  memberships OrgMembership[]
 }
 
 model Tournament {
@@ -165,13 +211,26 @@ model Tournament {
   prizePool      Float?
   startDate      DateTime?
   endDate        DateTime?
+  // ── M3 additions ──
+  hostingType       HostingType      @default(STICKS_HOSTED)
+  bracketType       BracketType?
+  handicapAllowance Float            @default(100)
+  teeAssignment     Json?
+  multiRoundConfig  Json?
+  leaderboardFrozen Boolean          @default(false)
+  currentRound      Int              @default(1)
+  // ── end M3 ──
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
-  organization Organization     @relation(fields: [organizationId], references: [id])
-  season       Season?          @relation(fields: [seasonId], references: [id])
-  entries      TournamentEntry[]
-  rounds       Round[]
+  organization   Organization     @relation(fields: [organizationId], references: [id])
+  season         Season?          @relation(fields: [seasonId], references: [id])
+  entries        TournamentEntry[]
+  rounds         Round[]
+  pairings       Pairing[]
+  bracketMatches BracketMatch[]
+  scoreAuditLogs ScoreAuditLog[]
+  scoreDisputes  ScoreDispute[]
 }
 
 model TournamentEntry {
@@ -183,10 +242,26 @@ model TournamentEntry {
   paymentStatus String?
   score         Int?
   bracketPos    Int?
+  // ── M3 additions ──
+  seedPosition      Int?
+  netScore          Int?
+  pointsEarned      Float?
+  matchResult       MatchResult?
+  eliminationStatus EliminationStatus @default(ACTIVE)
+  thru              Int               @default(0)
+  scoreRelToPar     Int               @default(0)
+  // ── end M3 ──
   createdAt     DateTime @default(now())
 
   tournament Tournament @relation(fields: [tournamentId], references: [id])
   user       User       @relation(fields: [userId], references: [id])
+
+  pairingSlots     PairingSlot[]
+  bracketAsPlayer1 BracketMatch[] @relation("player1")
+  bracketAsPlayer2 BracketMatch[] @relation("player2")
+  bracketAsWinner  BracketMatch[] @relation("winner")
+  scoreAuditLogs   ScoreAuditLog[]
+  scoreDisputes    ScoreDispute[]
 
   @@unique([tournamentId, userId])
 }
@@ -199,6 +274,10 @@ model Season {
   dropWorstRounds Int?
   startDate       DateTime?
   endDate         DateTime?
+  // ── M3 additions ──
+  finalized       Boolean  @default(false)
+  standingsCache  Json?
+  // ── end M3 ──
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -385,4 +464,107 @@ model ShotTrack {
   @@index([roundId])
   @@index([roundId, holeNumber])
   @@index([timestamp])
+}
+
+// ─── M3 Tournament Engine Models ─────────────────────────────────────────────
+
+model Pairing {
+  id           String        @id @default(uuid())
+  tournamentId String
+  roundNumber  Int
+  groupNumber  Int
+  createdAt    DateTime      @default(now())
+
+  tournament Tournament    @relation(fields: [tournamentId], references: [id])
+  slots      PairingSlot[]
+
+  @@unique([tournamentId, roundNumber, groupNumber])
+}
+
+model PairingSlot {
+  id        String @id @default(uuid())
+  pairingId String
+  entryId   String
+  slotOrder Int
+
+  pairing Pairing         @relation(fields: [pairingId], references: [id])
+  entry   TournamentEntry @relation(fields: [entryId], references: [id])
+
+  @@unique([pairingId, entryId])
+}
+
+model BracketMatch {
+  id           String   @id @default(uuid())
+  tournamentId String
+  roundNumber  Int
+  matchNumber  Int
+  entry1Id     String?
+  entry2Id     String?
+  winnerId     String?
+  isBye        Boolean  @default(false)
+  matchScore   String?
+  bracketSide  String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  tournament Tournament       @relation(fields: [tournamentId], references: [id])
+  entry1     TournamentEntry? @relation("player1", fields: [entry1Id], references: [id])
+  entry2     TournamentEntry? @relation("player2", fields: [entry2Id], references: [id])
+  winner     TournamentEntry? @relation("winner", fields: [winnerId], references: [id])
+
+  @@unique([tournamentId, roundNumber, matchNumber])
+}
+
+model OrgMembership {
+  id             String       @id @default(uuid())
+  organizationId String
+  userId         String
+  role           OrgRole      @default(PLAYER)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id])
+  user         User         @relation(fields: [userId], references: [id])
+
+  @@unique([organizationId, userId])
+}
+
+model ScoreAuditLog {
+  id            String          @id @default(uuid())
+  tournamentId  String
+  entryId       String
+  holeNumber    Int
+  originalValue Int
+  newValue      Int
+  editedById    String
+  createdAt     DateTime        @default(now())
+
+  tournament Tournament      @relation(fields: [tournamentId], references: [id])
+  entry      TournamentEntry @relation(fields: [entryId], references: [id])
+  editedBy   User            @relation("scoreEdits", fields: [editedById], references: [id])
+
+  @@index([tournamentId])
+  @@index([entryId])
+}
+
+model ScoreDispute {
+  id              String        @id @default(uuid())
+  tournamentId    String
+  entryId         String
+  holeNumber      Int
+  claimedScore    Int
+  recordedScore   Int
+  evidenceUrl     String?
+  status          DisputeStatus @default(OPEN)
+  resolvedById    String?
+  resolutionNotes String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  tournament Tournament      @relation(fields: [tournamentId], references: [id])
+  entry      TournamentEntry @relation(fields: [entryId], references: [id])
+  resolvedBy User?           @relation("disputeResolutions", fields: [resolvedById], references: [id])
+
+  @@index([tournamentId])
+  @@index([entryId])
 }
