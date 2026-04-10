@@ -81,7 +81,7 @@ export function ScoringProgressScreen() {
         </View>
       ) : (
         <ScrollView horizontal>
-          <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+          <ScrollView contentContainerStyle={{ paddingBottom: 120 }}>
             {/* Header row */}
             <View style={styles.gridRow}>
               <View style={styles.nameCol}><Text style={styles.colHeader}>Player</Text></View>

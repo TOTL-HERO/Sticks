@@ -89,7 +89,7 @@ export function ResultsScreen() {
         <FlatList
           data={entries}
           keyExtractor={(item) => item.entryId}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 120 }}
           renderItem={({ item }) => (
             <View style={styles.entryRow}>
               <View style={styles.rankWrap}>

@@ -124,7 +124,7 @@ export function CommissionerHomeScreen() {
               <Text style={styles.sectionCount}>{section.data.length}</Text>
             </View>
           )}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 120 }}
         />
       )}
     </SafeAreaView>

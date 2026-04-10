@@ -104,7 +104,7 @@ export function PlayScreen() {
           }}
         />
 
-        <View style={{ paddingTop: 16, paddingBottom: 100, gap: 12 }}>
+        <View style={{ paddingTop: 16, paddingBottom: 120, gap: 12 }}>
           <Button variant="primary" fullWidth onPress={handleStartRound}>{starting ? 'Starting...' : 'Start Round'}</Button>
           <Button variant="secondary" fullWidth onPress={() => navigation.navigate('TeeTimes')}>Book Tee Time</Button>
         </View>

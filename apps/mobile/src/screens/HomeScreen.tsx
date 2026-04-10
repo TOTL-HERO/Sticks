@@ -124,7 +124,7 @@ export function HomeScreen() {
           ListHeaderComponent={renderHeader}
           ListEmptyComponent={<View style={styles.emptyWrap}><MaterialCommunityIcons name="newspaper-variant-outline" size={48} color="#88938c" /><Text style={styles.emptyTitle}>No activity yet</Text><Text style={styles.emptyDesc}>Play a round or follow other golfers to see their activity</Text></View>}
           onEndReached={handleEndReached} onEndReachedThreshold={0.5}
-          contentContainerStyle={{ paddingBottom: 100 }}
+          contentContainerStyle={{ paddingBottom: 120 }}
           ListFooterComponent={isFetchingNextPage ? <View style={{ paddingVertical: 16, alignItems: 'center' }}><ActivityIndicator size="small" color="#84d7af" /></View> : null}
         />
       )}

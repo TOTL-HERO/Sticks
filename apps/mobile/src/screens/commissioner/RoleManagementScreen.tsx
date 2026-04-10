@@ -108,7 +108,7 @@ export function RoleManagementScreen() {
         <FlatList
           data={members}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 100 }}
+          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 120 }}
           renderItem={({ item }) => (
             <Card marginBottom={8}>
               <View style={styles.memberRow}>

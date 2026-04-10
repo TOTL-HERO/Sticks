@@ -90,6 +90,6 @@ export const tabBar = {
   borderColor: 'rgba(63, 73, 67, 0.2)',
   activeColor: '#84d7af',
   inactiveColor: '#bec9c1',
-  /** Content padding to clear the absolute-positioned tab bar */
-  contentPadding: 100,
+  /** Content padding to clear the absolute-positioned tab bar (85 + ~34 safe area) */
+  contentPadding: 120,
 } as const;

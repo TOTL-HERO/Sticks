@@ -146,7 +146,7 @@ export function SeasonStandingsScreen() {
         <FlatList
           data={tournaments}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
           ListEmptyComponent={<Text style={styles.emptyText}>No tournaments in this season</Text>}
           renderItem={({ item }) => (
             <TouchableOpacity onPress={() => nav.navigate('TournamentDetail', { tournamentId: item.id })} activeOpacity={0.7}>
@@ -168,7 +168,7 @@ export function SeasonStandingsScreen() {
           <FlatList
             data={standingsData}
             keyExtractor={(item) => item.userId}
-            contentContainerStyle={{ paddingBottom: 100 }}
+            contentContainerStyle={{ paddingBottom: 120 }}
             ListEmptyComponent={<View style={styles.center}><Text style={styles.emptyText}>No roster members</Text></View>}
             renderItem={({ item }) => (
               <View style={styles.standingRow}>

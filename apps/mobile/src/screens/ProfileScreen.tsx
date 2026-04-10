@@ -90,7 +90,7 @@ export function ProfileScreen() {
   return (
     <SafeAreaView style={styles.safe} edges={['top']}>
       <FlatList
-        data={rounds} keyExtractor={(item) => item.id} renderItem={renderRound} contentContainerStyle={{ paddingBottom: 100 }}
+        data={rounds} keyExtractor={(item) => item.id} renderItem={renderRound} contentContainerStyle={{ paddingBottom: 120 }}
         ListHeaderComponent={
           <>
             <View style={styles.hero}>

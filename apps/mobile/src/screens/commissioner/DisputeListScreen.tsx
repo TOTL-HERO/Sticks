@@ -79,7 +79,7 @@ export function DisputeListScreen() {
         <FlatList
           data={disputes}
           keyExtractor={(item) => item.id}
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
           renderItem={({ item }) => (
             <Card marginBottom={12}>
               <View style={styles.disputeHeader}>

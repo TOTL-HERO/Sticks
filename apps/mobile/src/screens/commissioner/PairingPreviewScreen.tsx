@@ -109,7 +109,7 @@ export function PairingPreviewScreen() {
       {isLoading ? (
         <View style={styles.center}><ActivityIndicator size="large" color="#84d7af" /></View>
       ) : isBracket ? (
-        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
+        <ScrollView contentContainerStyle={{ padding: 16, paddingBottom: 120 }}>
           {(bracket ?? []).map((m) => (
             <Card key={`${m.roundNumber}-${m.matchNumber}`} marginBottom={8}>
               <Text style={styles.matchLabel}>R{m.roundNumber} · Match {m.matchNumber}{m.isBye ? ' (BYE)' : ''}</Text>
@@ -133,7 +133,7 @@ export function PairingPreviewScreen() {
         <FlatList
           data={pairings ?? []}
           keyExtractor={(item) => String(item.groupNumber)}
-          contentContainerStyle={{ padding: 16, paddingBottom: 100 }}
+          contentContainerStyle={{ padding: 16, paddingBottom: 120 }}
           ListEmptyComponent={<Text style={styles.emptyText}>No pairings generated yet. Tap Generate above.</Text>}
           renderItem={({ item }) => (
             <Card marginBottom={8}>

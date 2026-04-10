@@ -70,7 +70,7 @@ export function RoundDetailScreen() {
       </View>
 
       <FlatList
-        data={round.holes} keyExtractor={(item) => item.id ?? `hole-${item.holeNumber}`} contentContainerStyle={{ paddingBottom: 100 }}
+        data={round.holes} keyExtractor={(item) => item.id ?? `hole-${item.holeNumber}`} contentContainerStyle={{ paddingBottom: 120 }}
         renderItem={({ item }) => (
           <View style={styles.holeRow}>
             <View style={{ width: 48, alignItems: 'center' }}><Text style={styles.holeNum}>{item.holeNumber}</Text></View>

@@ -105,7 +105,7 @@ export function RegistrationListScreen() {
           <Text style={styles.emptyText}>No players registered yet</Text>
         </View>
       ) : (
-        <FlatList data={entries} keyExtractor={(item) => item.id} renderItem={renderEntry} contentContainerStyle={{ paddingBottom: 100 }} />
+        <FlatList data={entries} keyExtractor={(item) => item.id} renderItem={renderEntry} contentContainerStyle={{ paddingBottom: 120 }} />
       )}
     </SafeAreaView>
   );
